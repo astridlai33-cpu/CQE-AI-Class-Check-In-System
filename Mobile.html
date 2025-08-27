@@ -33,6 +33,16 @@
   .btn.ghost{background:#1b2433;border:1px solid var(--border);color:#fff}
   .btn.inline{width:auto;padding:10px 12px}
   .note{font-size:12px;color:var(--muted);margin-top:6px}
+/* 統計數字更新縮放動畫 */
+@keyframes stat-bump {
+  0%   { transform: scale(1);   opacity: .85; }
+  35%  { transform: scale(1.06); }
+  100% { transform: scale(1);   opacity: 1; }
+}
+#tipCourse.bump {
+  animation: stat-bump .45s ease;
+}
+
   .warn{color:var(--warn)} .ok{color:var(--ok)} .error{color:var(--danger)}
 
   /* 學員列表 */
@@ -153,11 +163,65 @@
     </div>
   </div>
 </div>
-
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
-/* ===== Supabase ===== */
+/* ===== Supabase（含 Broadcast）===== */
 const SUPABASE_URL = 'https://kxyguqnoudtnxkexbsnc.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imt4eWd1cW5vdWR0bnhrZXhic25jIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTU5MzQxODUsImV4cCI6MjA3MTUxMDE4NX0.Tpv6J1KM10lyrLORWdXjN45YGedcCrjdjjdYV61qp38';
+
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+let __bc = null;
+let __bcReady = null;   // ← 新增：等待 SUBSCRIBED
+
+function ensureBroadcast(){
+  if (__bc) return __bc;
+
+  __bc = sb.channel('checkin-bc', { config:{ broadcast:{ self:false } } })
+    .on('broadcast', { event:'checkin' }, (msg)=>{
+      const p = msg?.payload || {};
+      if (!p.course_id || !p.student_id) return;
+      if (String(p.course_id) !== String(currentCourseId)) return; // 型別歸一
+
+      CHECKED.add(String(p.student_id));           // ← 一律字串
+      const card = list.querySelector(`[data-sid="${String(p.student_id)}"]`);
+      if (card){
+        card.classList.add('checked');
+        if (!card.querySelector('.tag-ok')){
+          const tag = document.createElement('span');
+          tag.className = 'tag-ok';
+          tag.textContent = '已報到';
+          card.appendChild(tag);
+        }
+      }
+      updateStats();
+    });
+
+  // ← 新增：建立 Promise，等到 SUBSCRIBED 才算 ready
+  __bcReady = new Promise((resolve)=> {
+    __bc.subscribe((status)=>{
+      if (status === 'SUBSCRIBED') resolve();
+    });
+  });
+
+  return __bc;
+}
+
+async function emitCheckin(course_id, student_id){
+  try{
+    ensureBroadcast();
+    await __bcReady;  // ← 關鍵：等訂閱完成再送
+    await __bc.send({
+      type:'broadcast',
+      event:'checkin',
+      payload:{ course_id: String(course_id), student_id: String(student_id), ts: Date.now() }
+    });
+  }catch(_){}
+}
+</script>
+<script>
+
+/* ===== 你的其餘 App 程式從這裡開始（rest、UI、handlers…）===== */
 
 const $ = (q)=>document.querySelector(q);
 const selCourse = $('#selCourse'), btnReload=$('#btnReload');
@@ -213,6 +277,55 @@ function escapeHtml(str){
 /* ===== 狀態與工具 ===== */
 let STUDENTS = [];
 let CHECKED = new Set();
+// === Mobile 端 Postgres Realtime 訂閱 ===
+let __rtCh = null;
+function setupRealtimeAttendanceMobile(courseId){
+  try{
+    if (__rtCh){
+      sb.removeChannel(__rtCh);
+      __rtCh = null;
+    }
+    if (!courseId) return;
+
+    const cidStr = String(courseId);
+
+    __rtCh = sb
+      .channel(`mobile-attendance-${cidStr}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',             // ← 只聽 INSERT（新報到）
+          schema: 'public',
+          table: 'attendance',
+          filter: `course_id=eq.${cidStr}`
+        },
+        (payload) => {
+          const sid = payload?.new?.student_id;
+          const cid = payload?.new?.course_id;
+          if (!sid || String(cid) !== String(currentCourseId)) return;
+
+          CHECKED.add(String(sid));  // ← 一律字串
+
+          const card = list.querySelector(`[data-sid="${String(sid)}"]`);
+          if (card){
+            card.classList.add('checked');
+            if (!card.querySelector('.tag-ok')){
+              const tag = document.createElement('span');
+              tag.className = 'tag-ok';
+              tag.textContent = '已報到';
+              card.appendChild(tag);
+            }
+          }
+          updateStats();
+        }
+      )
+      .subscribe();
+  }catch(e){
+    console.warn('setupRealtimeAttendanceMobile 失敗：', e);
+  }
+}
+
+
 let currentCourseId = null;
 
 // 是否為「今日課程」（影響是否允許報到）
@@ -220,24 +333,42 @@ let isTodayCourse = true;
 // 以 id 快取課程物件（用於切換時判斷日期）
 let COURSE_BY_ID = new Map();
 
-/* ✅ 統計函式（已報到 / 未報到 / 參與率） */
+/* ✅ 統計函式（已報到 / 未報到 / 參與率）＋縮放動畫 */
+let __prevStatsMobile = { checked:null, unchecked:null, rate:null }; // 👈 新增：記錄上次數值
+
 function updateStats(){
   const total = STUDENTS.length;
   const checked = CHECKED.size;
   const unchecked = Math.max(0, total - checked);
   const rate = total > 0 ? Math.round(checked * 100 / total) : 0;
+
   const tip = document.getElementById('tipCourse');
   if (!tip) return;
 
   if (isTodayCourse){
     tip.classList.remove('warn','error');
     tip.textContent = `已報到: ${checked} 人, 未報到: ${unchecked} 人, 參與率: ${rate}%`;
+
+    // 👇 關鍵：有變化就觸發縮放動畫
+    const changed =
+      __prevStatsMobile.checked   !== checked ||
+      __prevStatsMobile.unchecked !== unchecked ||
+      __prevStatsMobile.rate      !== rate;
+
+    if (changed){
+      tip.classList.remove('bump'); // 先移除
+      void tip.offsetWidth;         // 強制回流，重置動畫
+      tip.classList.add('bump');    // 再加回去就會播放
+    }
+
+    __prevStatsMobile = { checked, unchecked, rate };
   }else{
     tip.classList.remove('error');
     tip.classList.add('warn');
     tip.textContent = '*非當日課程,無法報到';
   }
 }
+
 
 /* 依 isTodayCourse 鎖定輸入與按鈕 */
 function applyCheckinLock(){
@@ -267,7 +398,13 @@ async function loadTodayCourses(){
       });
       isTodayCourse = true;
       applyCheckinLock();
-      if (rows.length===1){ selCourse.value = rows[0].id; await loadStudents(); }
+      if (rows.length===1){ 
+  selCourse.value = rows[0].id; 
+  await loadStudents();
+  // ✅ 確保第一次自動選課也立即訂閱
+  setupRealtimeAttendanceMobile(selCourse.value);
+}
+
       return;
     }
 
@@ -307,13 +444,20 @@ selCourse.addEventListener('change', async ()=>{
     applyCheckinLock();
     list.innerHTML = '';
     emptyMsg.textContent = '請先選擇課程';
+
+    // 取消任何既有訂閱
+    setupRealtimeAttendanceMobile(null);
     return;
   }
   const c = COURSE_BY_ID.get(cid);
   isTodayCourse = !!(c && c.date === todayStr());
   applyCheckinLock();
   await loadStudents();
+
+  // ← 新增：切課後，訂閱該課程的 attendance 變更
+  setupRealtimeAttendanceMobile(cid);
 });
+
 
 /* 名單渲染 */
 function renderList(){
@@ -336,51 +480,57 @@ function renderList(){
   }
   emptyMsg.textContent = '';
 
-  rows.forEach(s=>{
-    const el = document.createElement('div');
-    const ok = CHECKED.has(s.id);
-    el.className = 'item'+(ok?' checked':'');
-    el.innerHTML = `
-      <div class="av">${escapeHtml(getInitials(s.name||''))}</div>
-      <div class="name">${escapeHtml(s.name||'')}</div>
-      ${ok?'<span class="tag-ok">已報到</span>':''}
-    `;
-    el.dataset.emp = s.employee_no || '';
+rows.forEach(s=>{
+  const el = document.createElement('div');
+  const ok = CHECKED.has(String(s.id)); // ← 用字串判斷
+  el.className = 'item'+(ok?' checked':'');
+  el.innerHTML = `
+    <div class="av">${escapeHtml(getInitials(s.name||''))}</div>
+    <div class="name">${escapeHtml(s.name||'')}</div>
+    ${ok?'<span class="tag-ok">已報到</span>':''}
+  `;
+  el.dataset.emp = s.employee_no || '';
+  el.dataset.sid = String(s.id); // ← DOM 上也放字串
 
-    el.addEventListener('click', async()=>{
-      if (!currentCourseId){ toast('請先選擇今日課程', 'error'); return; }
-      if (!isTodayCourse){ toast('此為「非今日課程」，僅供查看名單，無法報到。', 'error'); return; }
-      try{
-        await doCheckin(currentCourseId, s.id);
-        CHECKED.add(s.id);
+  el.addEventListener('click', async()=>{
+    if (!currentCourseId){ toast('請先選擇今日課程', 'error'); return; }
+    if (!isTodayCourse){ toast('此為「非今日課程」，僅供查看名單，無法報到。', 'error'); return; }
+    try{
+      await doCheckin(currentCourseId, s.id);
+      emitCheckin(currentCourseId, s.id);
+
+      CHECKED.add(String(s.id));            // ← 一律字串
+      el.classList.add('checked');
+      if (!el.querySelector('.tag-ok')){
+        const tag=document.createElement('span');
+        tag.className='tag-ok'; tag.textContent='已報到';
+        el.appendChild(tag);
+      }
+      toast('🎉 報到成功：'+(s.name||''), 'success');
+      updateStats();
+    }catch(e){
+      const m = String(e.message||'');
+      if (/duplicate key value|conflict|already exists|duplicate/i.test(m)){
+        emitCheckin(currentCourseId, s.id); // dup 也廣播（可選）
+
+        CHECKED.add(String(s.id));          // ← 一律字串
         el.classList.add('checked');
         if (!el.querySelector('.tag-ok')){
           const tag=document.createElement('span');
           tag.className='tag-ok'; tag.textContent='已報到';
           el.appendChild(tag);
         }
-        toast('🎉 報到成功：'+(s.name||''), 'success');
-        updateStats(); // 成功後更新統計
-      }catch(e){
-        const m = String(e.message||'');
-        if (/duplicate key value|conflict|already exists|duplicate/i.test(m)){
-          CHECKED.add(s.id);
-          el.classList.add('checked');
-          if (!el.querySelector('.tag-ok')){
-            const tag=document.createElement('span');
-            tag.className='tag-ok'; tag.textContent='已報到';
-            el.appendChild(tag);
-          }
-          toast('✅ 已報到（重複略過）', 'dup');
-          updateStats(); // 重複也更新統計
-        }else{
-          toast('❌ 報到失敗：'+m, 'error');
-        }
+        toast('✅ 已報到（重複略過）', 'dup');
+        updateStats();
+      }else{
+        toast('❌ 報到失敗：'+m, 'error');
       }
-    }, {passive:true});
+    }
+  }, {passive:true});
 
-    list.appendChild(el);
-  });
+  list.appendChild(el);
+});
+
 
   updateStats(); // 初次渲染後更新一次
 }
@@ -388,13 +538,20 @@ function renderList(){
 /* 載入學員 + 當前課程出席情況 */
 async function loadStudents(){
   list.innerHTML = ''; q.value='';
-  const cid = selCourse.value; currentCourseId = cid || null;
-  if (!cid) return;
+  const cid = selCourse.value;
+
+  // ✅ 統一成字串，供 Broadcast/Realtime/比對使用
+  currentCourseId = cid ? String(cid) : null;
+
+  if (!cid){
+    setupRealtimeAttendanceMobile(null);
+    return;
+  }
 
   try{
     const studs = await rest('/rest/v1/students?select=*&limit=2000');
     STUDENTS = Array.isArray(studs)? studs : [];
-    STUDENTS.sort((a,b)=> (a.name||'').localeCompare(b.name||'', 'en', {sensitivity:'base'})); // A→Z
+    STUDENTS.sort((a,b)=> (a.name||'').localeCompare(b.name||'', 'en', {sensitivity:'base'}));
   }catch(e){
     emptyMsg.textContent = '讀取學員失敗：'+e.message;
     emptyMsg.classList.add('error'); return;
@@ -403,11 +560,15 @@ async function loadStudents(){
   CHECKED = new Set();
   try{
     const att = await rest(`/rest/v1/attendance?select=student_id&course_id=eq.${encodeURIComponent(cid)}`);
-    (att||[]).forEach(a=> CHECKED.add(a.student_id));
+    (att||[]).forEach(a=> CHECKED.add(String(a.student_id))); // ← 一律字串
   }catch(e){/* ignore */ }
 
   renderList();
+
+  // ← 載入完就訂閱
+  setupRealtimeAttendanceMobile(cid);
 }
+
 
 /* 搜尋防抖 */
 let debounceT=null;
@@ -445,11 +606,17 @@ btnIn.addEventListener('click', async()=>{
       return;
     }
     const s = stu[0];
+
     await doCheckin(cid, s.id);
-    CHECKED.add(s.id);
+    emitCheckin(cid, s.id);
+
+    // ★ 這行改為字串：String(s.id)
+    CHECKED.add(String(s.id));
+
     msg.textContent='報到成功！'; msg.className='note ok';
     toast('🎉 報到成功', 'success');
     emp.value='';
+
     // 同步列表 UI：用 data-emp 對應 employee_no
     const card = Array.from(list.children).find(x=> (x.dataset.emp||'') === (s.employee_no||''));
     if (card){
@@ -530,7 +697,12 @@ async function onSaveNewStudent(){
     }
 
     await doCheckin(currentCourseId, s.id);
-    CHECKED.add(s.id);
+    // （可選）廣播給其他裝置
+    emitCheckin(currentCourseId, s.id);
+
+    // ★ 這行改為字串：String(s.id)
+    CHECKED.add(String(s.id));
+
     toast('🎉 建立並報到成功','success');
     closeNewStudentModal();
 
@@ -539,10 +711,12 @@ async function onSaveNewStudent(){
     STUDENTS.push(s);
     STUDENTS.sort((a,b)=> (a.name||'').localeCompare(b.name||'', 'en', {sensitivity:'base'}));
     renderList();
+
   }catch(e){
     toast('❌ 建立失敗：'+(e?.message||e),'error');
   }
 }
+
 
 /* 與桌機版一致的 doCheckin（course_id + student_id） */
 async function doCheckin(course_id, student_id){
@@ -565,7 +739,9 @@ async function doCheckin(course_id, student_id){
 }
 
 /* 初始化 */
+ensureBroadcast();   // ← 新增：開啟廣播接收
 loadTodayCourses();
+
 </script>
 </body>
 </html>

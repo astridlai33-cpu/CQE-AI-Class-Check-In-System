@@ -45,6 +45,16 @@
 .note.warn   { color: var(--warn); }
 .note.ok     { color: var(--ok); }
 .note.danger { color: var(--danger); }
+/* 統計數字更新動畫（#todayInfo） */
+@keyframes stat-bump {
+  0%   { transform: scale(1);   opacity: .85; }
+  35%  { transform: scale(1.06); }
+  100% { transform: scale(1);   opacity: 1; }
+}
+#todayInfo.bump {
+  animation: stat-bump .45s ease;
+}
+
     .list{display:grid;gap:8px}
     .list .item{display:flex;justify-content:space-between;align-items:center;padding:10px 12px;background:#0e131b;border:1px solid var(--border);border-radius:12px}
 
@@ -143,27 +153,6 @@
   background: #0e131b;
 }
 
-/* 圓形 icon 按鈕樣式 */
-.icon-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 34px;
-  height: 34px;
-  border-radius: 50%;
-  background: #1c2433;
-  border: 1px solid var(--border);
-  cursor: pointer;
-  color: var(--fg);
-  transition: all 0.15s ease;
-}
-
-.icon-btn:hover {
-  border-color: var(--accent);
-  color: var(--accent);
-  background: #0e131b;
-}
-
 .icon-btn svg {
   width: 10px;       /* 調整箭頭大小 */
   height: 10px;
@@ -225,6 +214,8 @@
   color:#e7ebf2;
   text-shadow:0 0 6px rgba(74,163,255,.6);
 }
+.error  { color: var(--danger); }
+.success{ color: var(--ok); }
 
 </style>
 </head>
@@ -317,14 +308,9 @@
     <label>ID（工號）</label>
     <input id="inpEmp2" placeholder="ID / 工號"/>
     <div class="row" style="margin-top:8px">
-  <button id="btnCheckin">Add</button>
-  <button id="btnClearEmp" class="ghost">清除</button>
-</div>
-...
-<div class="row" style="margin-top:8px">
-  <button id="btnCreateStudent">建立並報到</button>
-  <button id="btnCancelCreate" class="ghost">取消</button>
-</div>
+      <button id="btnCreateStudent">建立並報到</button>
+      <button id="btnCancelCreate" class="ghost">取消</button>
+    </div>
 
     <div class="note">＊按「建立並報到」後，系統會用這筆資料完成本次報到。</div>
   </div>
@@ -486,11 +472,72 @@
 <!-- 第三方套件（先載，但主程式仍有保險 ensureChartJs()） -->
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+<!-- 👇 新增：Supabase JS（Realtime 需要它） -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 
 <script>
   // ===== Supabase 設定 =====
   const SUPABASE_URL = 'https://kxyguqnoudtnxkexbsnc.supabase.co';
   const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imt4eWd1cW5vdWR0bnhrZXhic25jIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTU5MzQxODUsImV4cCI6MjA3MTUxMDE4NX0.Tpv6J1KM10lyrLORWdXjN45YGedcCrjdjjdYV61qp38';
+
+  // 👇 新增：給 Realtime 用的 supabase-js client
+  const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+// === Broadcast：接收他裝置的即時報到 ===
+let __bc = null;
+function setupBroadcastReceiver(){
+  try{
+    if (__bc){ sb.removeChannel(__bc); __bc = null; }
+    __bc = sb.channel('checkin-bc', { config:{ broadcast:{ self:false } } })
+      .on('broadcast', { event:'checkin' }, (msg)=>{
+        const p = msg?.payload || {};
+        // 僅當前課程才處理
+        const cur = selCourseToday?.value;
+        if (!cur || p.course_id != cur) return;
+
+        const sid = p.student_id;
+        if (!sid) return;
+
+        // 本地集合 + 畫面立即更新（不必重撈）
+        __checkedSet.add(sid);
+        const card = studentCards?.querySelector(`[data-sid="${sid}"]`);
+        if (card){
+          card.classList.add('checked');
+          if (!card.querySelector('.chip-ok')){
+            const ok = document.createElement('span');
+            ok.className = 'chip-ok'; ok.textContent = '已報到'; ok.style.marginLeft='auto';
+            card.querySelector('.row-top')?.appendChild(ok);
+          }
+        }
+        updateTodayStats(); // 右上統計一起更新
+      })
+      .subscribe();
+  }catch(e){ console.warn('Broadcast receiver 啟動失敗：', e); }
+}
+// === 廣播送出：報到成功時呼叫 ===
+let __bcReady = null;
+function ensureBroadcast(){
+  if (!__bc){
+    __bc = sb.channel('checkin-bc', { config:{ broadcast:{ self:false } } });
+    __bcReady = new Promise((resolve)=>{
+      __bc.subscribe((status)=>{
+        if (status === 'SUBSCRIBED') resolve();
+      });
+    });
+  }
+  return __bc;
+}
+async function emitCheckin(course_id, student_id){
+  try{
+    ensureBroadcast();
+    await __bcReady;
+    await __bc.send({
+      type:'broadcast',
+      event:'checkin',
+      payload:{ course_id:String(course_id), student_id:String(student_id), ts:Date.now() }
+    });
+  }catch(e){ console.warn('broadcast 送出失敗：', e); }
+}
 
   const $=(q)=>document.querySelector(q);
 // === Utils: 文字轉義 & 產生頭像縮寫 ===
@@ -756,6 +803,8 @@ async function loadToday(){
           setCheckinEnabled(true);
 
           await loadStudentsAndAttendance();
+// 👇 新增：進入今天的課 → 開啟 Realtime 訂閱
+setupRealtimeAttendance(selCourseToday?.value || null);
           const total = __studentsCache.length;
           const checked = __checkedSet.size;
           const unchecked = Math.max(0, total - checked);
@@ -790,6 +839,8 @@ todayInfo.className = 'note warn';
 __allowCheckin = false;
 setCheckinEnabled(false);
 refreshCheckinMsg(); // ← 新增
+// 👇 新增：先取消任何既有訂閱（避免殘留）
+setupRealtimeAttendance(null);
 return;
 
       }
@@ -825,7 +876,7 @@ refreshCheckinMsg(); // ← 新增
     }
   }catch(e){
     todayInfo.textContent = '讀取今日/下一次課程失敗：' + e.message;
-todayInfo.className='note error';
+todayInfo.className='note danger';
 refreshCheckinMsg(); // ← 新增：避免殘留舊訊息
 
   }
@@ -861,13 +912,17 @@ const studentPager = $('#studentPager');
 
 // 👉 按鈕與輸入框保持可用；是否允許報到交由 click handler 的 __allowCheckin 判斷
 function setCheckinEnabled(enabled){
-  if (inpEmp)      inpEmp.disabled = false;  // 不鎖輸入框
-  if (btnCheckin)  btnCheckin.disabled = false; // 不鎖按鈕
-  if (btnClearEmp) btnClearEmp.disabled = false; // 不鎖按鈕
+  if (inpEmp)      inpEmp.disabled = !enabled;
+  if (btnCheckin)  btnCheckin.disabled = !enabled;
+  if (btnClearEmp) btnClearEmp.disabled = !enabled;
 }
+
 
 // 👉 讓輸入框按 Enter 也能觸發「立即報到」
 // === 即時更新今日統計（僅今天課程才顯示統計）===
+// 追蹤上一次的統計，用來判斷是否播放動畫
+let __prevStats = { checked: null, unchecked: null, rate: null };
+
 function updateTodayStats(){
   const isToday = selCourseToday?.selectedOptions?.[0]?.dataset?.date === todayStr();
   if (!isToday) return;
@@ -877,11 +932,55 @@ function updateTodayStats(){
   const unchecked = Math.max(0, total - checked);
   const rate      = total > 0 ? Math.round((checked / total) * 100) : 0;
 
+  // 更新文字
   todayInfo.textContent = `已報到: ${checked} 人, 未報到: ${unchecked} 人, 參與率: ${rate}%`;
-todayInfo.className = 'note';
-refreshCheckinMsg(); // ← 新增
+  todayInfo.className = 'note'; // 保持基礎樣式（今天才是白字）
 
+  // 若統計有變化，觸發動畫（移除→強制回流→加回 class）
+  const changed = (
+    __prevStats.checked   !== checked ||
+    __prevStats.unchecked !== unchecked ||
+    __prevStats.rate      !== rate
+  );
+  if (changed) {
+    todayInfo.classList.remove('bump');
+    void todayInfo.offsetWidth;      // 強制回流以重置動畫
+    todayInfo.classList.add('bump'); // 播放動畫
+  }
+
+  // 記錄這次數值
+  __prevStats = { checked, unchecked, rate };
+
+  refreshCheckinMsg(); // 你原本的行為：同步自助報到狀態
 }
+
+// === 自動刷新今日統計（每 2 秒，含防抖機制）===
+let __statsRefreshing = false;
+setInterval(async ()=>{
+  // 只處理「今天的課程」情境
+  const isToday = selCourseToday?.selectedOptions?.[0]?.dataset?.date === todayStr();
+  if (!isToday) return;
+
+  // 如果前一次還沒跑完，就跳過
+  if (__statsRefreshing) return;
+  __statsRefreshing = true;
+
+  try {
+    // 重新撈出最新出席紀錄
+    const courseId = selCourseToday?.value;
+    if (!courseId) return;
+
+    const att = await rest(`/rest/v1/attendance?select=student_id&course_id=eq.${encodeURIComponent(courseId)}`);
+    __checkedSet = new Set((att||[]).map(a=>a.student_id));
+
+    // 更新統計
+    updateTodayStats();
+  } catch(e) {
+    console.warn('統計刷新失敗：', e);
+  } finally {
+    __statsRefreshing = false;
+  }
+}, 2000);  // ← 這裡改成 2 秒
 
 // === 同步自助報到按鈕下方狀態（#checkinMsg） ===
 function refreshCheckinMsg(){
@@ -916,16 +1015,18 @@ inpEmp?.addEventListener('keydown', (e)=>{
 });
 
 
-  selCourseToday?.addEventListener('change', async ()=>{
+selCourseToday?.addEventListener('change', async ()=>{
   const opt = selCourseToday.selectedOptions?.[0];
   const isToday = (opt?.dataset?.date === todayStr());
   __allowCheckin = !!isToday;
   setCheckinEnabled(__allowCheckin);
 
-  refreshCheckinMsg(); // ← 新增：切課時即時同步下方狀態
-
+  refreshCheckinMsg(); // 切課時同步狀態
   await loadStudentsAndAttendance();
   updateTodayStats();
+
+  // 切課就改訂閱目標
+  setupRealtimeAttendance(selCourseToday?.value || null);
 });
 
 
@@ -956,7 +1057,49 @@ renderStudentCards();
 updateTodayStats();      // ← 載入完成後更新統計
 refreshCheckinMsg();     // ← 新增：名單載完，同步自助報到區狀態
 }
+/* ===== Realtime：attendance 變更即時更新（唯一版本）===== */
+let __rtChannel = null;
+let __rtDebounce = null;
 
+// 小防抖：併流兩側同時報到的瞬時多事件，120ms 後只刷新一次
+function scheduleRealtimeRefresh(){
+  clearTimeout(__rtDebounce);
+  __rtDebounce = setTimeout(()=>{
+    loadStudentsAndAttendance().catch(()=>{});
+  }, 120);
+}
+
+// 依目前課程 id 訂閱/重訂閱
+async function setupRealtimeAttendance(courseId){
+  try{
+    // 先取消舊的
+    if (__rtChannel){
+      await sb.removeChannel(__rtChannel);
+      __rtChannel = null;
+    }
+    if (!courseId) return;
+
+    // 只聽當前課程的異動
+    __rtChannel = sb
+      .channel(`attendance-${courseId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',          // INSERT/UPDATE/DELETE
+          schema: 'public',
+          table: 'attendance',
+          filter: `course_id=eq.${courseId}`
+        },
+        () => {
+          // 有變更 → 重新撈名單 + 統計（用防抖避免抖動）
+          scheduleRealtimeRefresh();
+        }
+      )
+      .subscribe();
+  }catch(e){
+    console.error('setupRealtimeAttendance 失敗：', e);
+  }
+}
 
     function getFilteredStudents(){
   const q = (studentSearch?.value || '').trim().toLowerCase();
@@ -1073,6 +1216,9 @@ function renderStudentCards(){
       }
       try{
         await doCheckin(__currentCourseId, s);
+    // 👇 新增：廣播通知
+    emitCheckin(__currentCourseId, s.id);
+
         __checkedSet.add(s.id);
         card.classList.add('checked');
         if (!card.querySelector('.chip-ok')){
@@ -1082,7 +1228,8 @@ function renderStudentCards(){
         }
         updateTodayStats(); // ← 新增：點名片成功即時更新統計
 
-      }catch(e){ alert('報到失敗：oin' + (e?.message || e)); }
+      }catch(e){ alert('報到失敗：' + (e?.message || e)); }
+
     });
 
     studentCards.appendChild(card);
@@ -1136,6 +1283,8 @@ btnCheckin?.addEventListener('click', async ()=>{
     // 根據結果數量決定流程
     if (Array.isArray(rows) && rows.length === 1){
   await doCheckin(course_id, rows[0]);
+  // 👇 新增：廣播通知
+  emitCheckin(course_id, rows[0].id);
 
   // 樂觀更新：本地集合 + 畫面（若卡片在當前頁面）
   __checkedSet.add(rows[0].id);
@@ -1243,6 +1392,13 @@ btnCheckin?.addEventListener('click', async ()=>{
       method:'POST',
       body: JSON.stringify({ course_id, student_id: student.id, user_agent: navigator.userAgent })
     });
+await rest('/rest/v1/attendance', {
+  method:'POST',
+  body: JSON.stringify({ course_id, student_id: student.id, user_agent: navigator.userAgent })
+});
+
+// 👇 新增：廣播通知別的裝置
+emitCheckin(course_id, student.id);
 
     if (checkinMsg){
       checkinMsg.textContent='報到成功！祝上課順利 🎉';
@@ -2225,6 +2381,7 @@ async function deleteStudentAdmin(s){
   function initAdminPickers(){ ['inpDate','inpStart','inpEnd'].forEach(id=>{ const el=document.getElementById(id); if(!el) return; }); }
   refreshAuthUI();
   ensureAdminDefaultTab();
+  setupBroadcastReceiver();   // ← 新增：開始接收他裝置的報到廣播
   loadToday();
   initAdminPickers();
 
