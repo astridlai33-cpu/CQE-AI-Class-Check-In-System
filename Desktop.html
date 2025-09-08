@@ -10,11 +10,11 @@
     var ok = token && token.ok === true && (!token.exp || Date.now() < token.exp);
     if (!ok) {
       var back = location.pathname + location.search + location.hash;
-      location.replace('Index.html?redir=' + encodeURIComponent(back));
+      location.replace('index.html?redir=' + encodeURIComponent(back));
     }
   } catch (e) {
     var back = location.pathname + location.search + location.hash;
-    location.replace('Index.html?redir=' + encodeURIComponent(back));
+    location.replace('index.html?redir=' + encodeURIComponent(back));
   }
 })();
 </script>
@@ -35,7 +35,7 @@ setTimeout(async function(){
   } catch (e) {
     console.warn("自動登出錯誤", e);
   }
-  window.location.href = "Index.html";
+  window.location.href = "index.html";
 }, 15 * 60 * 1000);
 </script>
 
