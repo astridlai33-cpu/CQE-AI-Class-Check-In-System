@@ -1604,10 +1604,10 @@ const bringTotalToFrontPlugin = {
   id: 'bringTotalToFrontPlugin',
   afterDatasetsDraw(chart) {
     // 找到 isTotal 的資料集索引
-    const dsIndex = chart.data.datasets.findIndex(d => d && d.isTotal);
-    if (dsIndex < 0) return;
+    const dsindex = chart.data.datasets.findindex(d => d && d.isTotal);
+    if (dsindex < 0) return;
 
-    const meta = chart.getDatasetMeta(dsIndex);
+    const meta = chart.getDatasetMeta(dsindex);
     if (!meta || meta.hidden) return;
 
     const { ctx } = chart;
@@ -1645,9 +1645,9 @@ const bringTotalToFrontPlugin = {
       ctx.font = '12px system-ui, -apple-system, Segoe UI, Microsoft JhengHei, sans-serif';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'bottom';
-      chart.data.datasets.forEach((ds, dsIndex) => {
+      chart.data.datasets.forEach((ds, dsindex) => {
         if (!ds.isTotal) return;
-        const meta = chart.getDatasetMeta(dsIndex);
+        const meta = chart.getDatasetMeta(dsindex);
         meta.data.forEach((pt, i) => {
           const val = ds.data[i];
           if (val > 0) {
