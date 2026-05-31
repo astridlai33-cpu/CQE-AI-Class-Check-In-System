@@ -1,0 +1,203 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>CQE | 課程排程平台</title>
+  <link rel="icon" href="/CQE-AI-Class-Check-In-System/assets/bear-logo_(Security%20C)-D4nzsVAk.ico" type="image/x-icon">
+  <meta name="description" content="CQE AI Class Check-In System — 課程排程平台"/>
+
+  <!-- ═══════════ Supabase 橋接層（在 React 載入前注入）═══════════ -->
+  <!-- Phase 2: 共用設定模組 -->
+  <script src="src/config.js"></script>
+  <script>
+  (function(){
+    var SUPABASE_URL  = window.CQE.config.SUPABASE_URL;
+    var SUPABASE_ANON = window.CQE.config.SUPABASE_ANON_KEY;
+    var WEEKS_AHEAD   = 8;   // 自動產生未來幾週的具體課程
+
+    function getToken(){ return localStorage.getItem('sb_access_token') || null; }
+
+    function hourToTime(h){
+      var hrs  = Math.floor(h);
+      var mins = Math.round((h - hrs) * 60);
+      return (hrs  < 10 ? '0' : '') + hrs  + ':' +
+             (mins < 10 ? '0' : '') + mins + ':00';
+    }
+
+    // dow 0=週一 ~ 6=週日（cqe-platform 慣例），產生從今天起 WEEKS_AHEAD 週的日期
+    function getUpcomingDates(dow){
+      var today = new Date(); today.setHours(0,0,0,0);
+      // cqe-platform DAYS=['週一'…'週日']，dow=0→週一→JS getDay()=1
+      var jsDow = (dow + 1) % 7;  // 轉回 JS Sunday=0 系統
+      var diff  = (jsDow - today.getDay() + 7) % 7;
+      var dates = [];
+      for(var w = 0; w < WEEKS_AHEAD; w++){
+        var d = new Date(today);
+        d.setDate(today.getDate() + diff + w * 7);
+        dates.push(d.getFullYear() + '-' +
+          String(d.getMonth()+1).padStart(2,'0') + '-' +
+          String(d.getDate()).padStart(2,'0'));
+      }
+      return dates;
+    }
+
+    async function sbFetch(path, opts){
+      opts = opts || {};
+      var h = {
+        'apikey': SUPABASE_ANON,
+        'Content-Type': 'application/json',
+        'Prefer': 'return=minimal'
+      };
+      var token = getToken();
+      if(token) h['Authorization'] = 'Bearer ' + token;
+      if(opts.prefer) h['Prefer'] = opts.prefer;
+      var res = await fetch(SUPABASE_URL + path, {
+        method: opts.method || 'GET',
+        headers: h,
+        body: opts.body || undefined
+      });
+      var txt = await res.text();
+      try{ return txt ? JSON.parse(txt) : null; }catch(e){ return txt; }
+    }
+
+    // 核心：將 cqe-platform 課程樣板同步至 Supabase
+    async function syncTemplateToCourses(course){
+      var token = getToken();
+      if(!token){ return; }  // 未登入，不寫 Supabase
+
+      var templateId = course.id;
+
+      // 1. Upsert schedule_templates
+      await sbFetch('/rest/v1/schedule_templates?on_conflict=id', {
+        method: 'POST',
+        prefer: 'resolution=merge-duplicates',
+        body: JSON.stringify({
+          id: templateId,
+          name: course.name,
+          color: window.CQE.config.PAL[course.ci % 10] || null,
+          updated_at: new Date().toISOString()
+        })
+      });
+
+      // 2. 刪除舊 slots，重寫新 slots
+      await sbFetch('/rest/v1/schedule_slots?template_id=eq.' + encodeURIComponent(templateId), { method: 'DELETE' });
+      var slots = (course.sessions || []).map(function(s){
+        return {
+          template_id: templateId,
+          dow: s.day,
+          start_hour: s.start * 0.5 + 7,   // slot → 小時（SHR=7，每 slot 30min）
+          end_hour:   s.end   * 0.5 + 7,
+          room: s.room || null,
+          dept: course.dept || null
+        };
+      });
+      if(slots.length){
+        await sbFetch('/rest/v1/schedule_slots', {
+          method: 'POST',
+          prefer: 'return=minimal',
+          body: JSON.stringify(slots)
+        });
+      }
+
+      // 3. 刪除此樣板未來的自動課程（date >= 今天）
+      var today = new Date().toISOString().slice(0,10);
+      await sbFetch(
+        '/rest/v1/courses?template_id=eq.' + encodeURIComponent(templateId) +
+        '&date=gte.' + today,
+        { method: 'DELETE' }
+      );
+
+      // 4. 重新產生未來 WEEKS_AHEAD 週的具體課程
+      var newCourses = [];
+      (course.sessions || []).forEach(function(s){
+        getUpcomingDates(s.day).forEach(function(date){
+          var desc = [
+            s.room && ('教室: ' + s.room),
+            course.dept && ('學員單位: ' + course.dept)
+          ].filter(Boolean).join(' | ') || null;
+          newCourses.push({
+            title:       course.name,
+            date:        date,
+            start_time:  hourToTime(s.start * 0.5 + 7),
+            end_time:    hourToTime(s.end   * 0.5 + 7),
+            description: desc,
+            template_id: templateId
+          });
+        });
+      });
+      if(newCourses.length){
+        await sbFetch('/rest/v1/courses', {
+          method: 'POST',
+          prefer: 'return=minimal',
+          body: JSON.stringify(newCourses)
+        });
+      }
+    }
+
+    // 刪除樣板時，也清除未來自動課程
+    async function deleteTemplateCourses(templateId){
+      var token = getToken();
+      if(!token) return;
+      var today = new Date().toISOString().slice(0,10);
+      await sbFetch('/rest/v1/courses?template_id=eq.' + encodeURIComponent(templateId) + '&date=gte.' + today, { method: 'DELETE' });
+      await sbFetch('/rest/v1/schedule_templates?id=eq.' + encodeURIComponent(templateId), { method: 'DELETE' });
+    }
+
+    // ── window.storage 介面（cqe-platform.jsx 呼叫）
+    window.storage = {
+      get: async function(key){
+        var raw = localStorage.getItem(key);
+        if(!raw) return null;
+        return { value: raw };
+      },
+      set: async function(key, value){
+        localStorage.setItem(key, value);
+        if(key === 'cqe-v3'){
+          try{
+            var data = JSON.parse(value);
+            var courses = data.c || [];
+            // 非阻塞同步課程
+            Promise.all(courses.map(function(c){ return syncTemplateToCourses(c); }))
+              .catch(function(e){ console.warn('[CQE] Supabase 同步失敗：', e); });
+            // 同步 profiles（成員清單）
+            var users = data.u || [];
+            if(users.length){
+              sbFetch('/rest/v1/profiles?on_conflict=id', {
+                method: 'POST',
+                prefer: 'resolution=merge-duplicates,return=minimal',
+                body: JSON.stringify(users.map(function(u){
+                  return { id: u.id, name: u.name, role: u.role };
+                }))
+              }).catch(function(e){ console.warn('[CQE] profiles 同步失敗：', e); });
+            }
+          }catch(e){ console.warn('[CQE] cqe-v3 解析失敗：', e); }
+        }
+      },
+      deleteTemplate: async function(templateId){
+        deleteTemplateCourses(templateId).catch(function(e){ console.warn('[CQE] 刪除樣板失敗：', e); });
+      }
+    };
+
+  })();
+  </script>
+  <script type="module" crossorigin src="/CQE-AI-Class-Check-In-System/assets/index-B22FH6jd.js"></script>
+  <link rel="stylesheet" crossorigin href="/CQE-AI-Class-Check-In-System/assets/index-I2ruTONs.css">
+</head>
+<body style="margin:0;background:#0f1115">
+
+  <div id="root">
+    <div style="display:flex;align-items:center;justify-content:center;height:100vh;
+      font:15px/1 system-ui,-apple-system,'Segoe UI','Microsoft JhengHei',sans-serif;
+      color:#9aa5b1;background:#0f1115;flex-direction:column;gap:14px">
+      <div style="width:36px;height:36px;border:3px solid #273043;border-top-color:#0070C0;
+        border-radius:50%;animation:spin .8s linear infinite"></div>
+      <span>載入排程平台…</span>
+    </div>
+  </div>
+
+  <style>@keyframes spin{to{transform:rotate(360deg)}}</style>
+
+  <!-- Phase 3: Vite 模組入口 -->
+</body>
+</html>

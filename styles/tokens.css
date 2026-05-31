@@ -1,0 +1,41 @@
+/* ═══════════════════════════════════════════════════════════════
+   CQE AI Class Check-In System — Shared Design Tokens
+   修改此檔案即可同步所有介面的設計風格
+   引用此檔的頁面：Desktop.html / Mobile.html / 測試環境/Desktop.html
+   ═══════════════════════════════════════════════════════════════ */
+
+/* ── 設計 Token：顏色、圓角、間距 ──────────────────────────── */
+:root {
+  --bg:      #0f1115;   /* 頁面背景 */
+  --card:    #151922;   /* 卡片/面板背景 */
+  --fg:      #e7ebf2;   /* 主要文字 */
+  --muted:   #9aa5b1;   /* 次要文字、佔位符 */
+  --accent:  #0070C0;   /* 主色（品牌藍） */
+  --ok:      #44c08a;   /* 成功狀態（綠） */
+  --warn:    #ffb020;   /* 警告狀態（橙） */
+  --danger:  #ff645d;   /* 錯誤/危險（紅） */
+  --border:  #273043;   /* 邊框、分隔線 */
+  --chip:    #1b2130;   /* Chip 背景 */
+  --radius:  16px;      /* 卡片圓角 */
+  --gap:     12px;      /* 標準間距 */
+
+  color-scheme: dark;   /* 深色模式（原生控件跟隨系統） */
+}
+
+/* ── 統計數字更新縮放動畫（stat-bump）────────────────────── */
+@keyframes stat-bump {
+  0%   { transform: scale(1);    opacity: .85; }
+  35%  { transform: scale(1.06);               }
+  100% { transform: scale(1);    opacity: 1;   }
+}
+
+/* 通用觸發類別：JS 動態加入 .bump 即可觸發動畫 */
+.bump {
+  animation: stat-bump .45s ease;
+}
+
+/* ── 重新整理按鈕旋轉動畫（spin-once）──────────────────────── */
+@keyframes spin-once {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}

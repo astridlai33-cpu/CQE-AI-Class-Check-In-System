@@ -1,0 +1,737 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>CQE | AI Class Check-In（Mobile）</title>
+<meta name="description" content="Mobile-first, today-only check-in: search or enter employee ID, tap to check in.">
+<link rel="stylesheet" href="styles/tokens.css">
+
+<style>
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.55 system-ui,-apple-system,"Segoe UI","Microsoft JhengHei",sans-serif}
+  .wrap{max-width:680px;margin:0 auto;padding:16px;padding-bottom:180px}
+  header{display:flex;align-items:center;gap:10px;margin:2px 0 10px}
+  .logo{width:40px;height:40px;border-radius:12px;background:linear-gradient(135deg,#2a2f3a,#1b2130);display:grid;place-items:center}
+  h1{font-size:18px;margin:0}
+  .sub{color:var(--muted);font-size:12px;margin-top:2px}
+
+  .card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:12px}
+  input,select{width:100%;padding:12px 14px;border-radius:14px;border:1px solid var(--border);background:#0e131b;color:#e7ebf2;font-size:16px}
+  input::placeholder{color:#7d8896}
+  .row{display:flex;gap:8px;flex-wrap:wrap}
+  .btn{
+    appearance:none;border:none;background:var(--accent);color:#fff;border-radius:14px;
+    padding:12px 14px;line-height:1.2;cursor:pointer;width:100%;font-weight:600;
+    text-shadow:0 1px 2px rgba(0,0,0,.65)
+  }
+  .btn.ghost{background:#1b2433;border:1px solid var(--border);color:#fff}
+  .btn.inline{width:auto;padding:10px 12px}
+  .note{font-size:12px;color:var(--muted);margin-top:6px}
+/* stat-bump 動畫已移至 styles/tokens.css */
+#tipCourse.bump {
+  animation: stat-bump .45s ease;
+}
+
+  .warn{color:var(--warn)} .ok{color:var(--ok)} .error{color:var(--danger)}
+
+  /* 學員列表 */
+  #list{display:grid;gap:8px;margin-top:8px}
+  .item{
+    display:flex;align-items:center;gap:12px;
+    background:#0e131b;border:1px solid var(--border);border-radius:14px;padding:12px 14px;
+    touch-action:manipulation; -webkit-tap-highlight-color: transparent;
+  }
+  .av{width:36px;height:36px;border-radius:50%;background:#1b2130;display:grid;place-items:center;font-size:13px;font-weight:700;letter-spacing:.5px}
+  .name{font-weight:700}
+  .tag-ok{margin-left:auto;font-size:11px;background:#12392c;color:#9af0c7;border:1px solid #1f6b51;border-radius:999px;padding:3px 8px}
+  .checked{outline:3px solid #44c08a;background:#0a1a14}
+
+  /* 底部操作列（空間精簡） */
+  .dock{
+    position:sticky;bottom:0;left:0;right:0;
+    padding-top:6px;            /* ⬅︎ 上方空間縮小 */
+    padding-bottom:0;           /* ⬅︎ 下方空間縮小 */
+    background:linear-gradient(180deg, rgba(15,17,21,0), rgba(15,17,21,.9) 28%, rgba(15,17,21,1));
+    backdrop-filter: blur(6px);
+  }
+  /* 只精簡 dock 區塊內卡片與行距 */
+  .dock .card{ padding:8px 10px; }
+  .dock .card h3{ margin:0 0 6px; }
+  .dock .row{ gap:6px; }
+  .dock .row + .row{ margin-top:4px !important; } /* 比原本 6px 更緊湊 */
+
+  /* 切換鈕 */
+  .switcher{
+    position:fixed; left:12px; bottom:12px; z-index:50;
+    background:#1b2433; color:#e7ebf2; border:1px solid var(--border);
+    border-radius:999px; padding:10px 12px; font-size:13px; text-decoration:none;
+  }
+
+  /* Toast */
+  .toast{
+    position:fixed;left:50%;bottom:18px;transform:translateX(-50%);
+    background:#0e131b;border:1px solid var(--border);color:#fff;padding:10px 14px;border-radius:12px;
+    box-shadow:0 10px 30px rgba(0,0,0,.35);opacity:0;pointer-events:none;transition:opacity .2s, transform .2s;
+  }
+  .toast.show{opacity:1;transform:translateX(-50%) translateY(-4px)}
+  .toast.success{ background:#12392c; border-color:#1f6b51; }
+  .toast.dup    { background:#102238; border-color:#2a4370; }
+  .toast.error  { background:#3a1212; border-color:#7a2b2b; }
+
+  /* Modal */
+  .modal-mask{position:fixed;inset:0;background:rgba(0,0,0,.6);display:none;align-items:center;justify-content:center;z-index:100}
+  .modal{background:#151922;padding:20px;border:1px solid var(--border);border-radius:16px;width:90%;max-width:420px;color:#fff}
+  .modal h3{margin:0 0 10px;font-size:16px}
+  .modal label{display:block;font-size:12px;color:var(--muted);margin:10px 0 4px}
+
+  /* Function Tab（Mobile）*/
+  #fnBar{
+    display:flex;gap:6px;flex-wrap:nowrap;
+    overflow-x:auto;padding-bottom:2px;
+    margin-top:8px;
+    -webkit-overflow-scrolling:touch;
+    scrollbar-width:none;
+  }
+  #fnBar::-webkit-scrollbar{ display:none; }
+  .fn-btn-m{
+    appearance:none;border:1px solid var(--border);
+    background:#1b2433;color:var(--muted);border-radius:999px;
+    padding:6px 14px;font-size:13px;font-weight:600;
+    cursor:pointer;white-space:nowrap;flex-shrink:0;
+  }
+  .fn-btn-m.active{
+    background:var(--accent);border-color:var(--accent);color:#fff;
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+<header>
+  <div class="logo">
+    <img src="bear-logo_(Security C).ico" alt="Logo" style="width:100%;height:100%;object-fit:contain;border-radius:12px">
+  </div>
+  <div style="flex:1">
+    <h1>CQE | AI Class Check-In</h1>
+    <div class="sub" id="todayTxt">今天：</div>
+  </div>
+  <a href="index.html?ref=desktop" title="課程排程平台"
+     style="display:inline-flex;align-items:center;justify-content:center;width:38px;height:38px;border-radius:50%;background:#1c2433;border:1px solid #273043;color:#e7ebf2;font-size:20px;line-height:1;text-decoration:none;flex-shrink:0">📅</a>
+</header>
+
+  <!-- Next Class（標題 + 右側統計/提示） -->
+  <section class="card">
+    <div class="row" style="align-items:center;justify-content:space-between">
+      <h3 style="margin:0">Next Class</h3>
+      <div id="tipCourse" class="note"></div>
+    </div>
+    <div class="row" style="margin-top:8px">
+      <select id="selCourse" aria-label="選擇今日課程"></select>
+      <button id="btnReload" class="btn inline ghost" type="button">重新載入</button>
+    </div>
+  </section>
+
+  <!-- 快速搜尋 / 點名 -->
+  <section class="card" style="margin-top:10px">
+    <h3>快速搜尋 / 點名</h3>
+    <div id="fnBar"></div>
+    <input id="q" placeholder="搜尋學員（Team / Name / ID）" autocomplete="off" inputmode="search" style="margin-top:8px">
+    <div id="list"></div>
+    <div id="emptyMsg" class="note"></div>
+  </section>
+
+  <!-- 自助報到（已精簡上下空間） -->
+  <div class="dock">
+    <section class="card">
+      <h3>自助報到</h3>
+      <div class="row">
+        <input id="emp" placeholder="例如：A123456" autocomplete="off" inputmode="text" />
+        <button id="btnIn" class="btn" type="button">立即報到</button>
+      </div>
+      <div class="row" style="margin-top:6px">
+        <button id="btnClear" class="btn ghost" type="button">清除</button>
+      </div>
+      <div id="msg" class="note"></div>
+    </section>
+  </div>
+</div>
+
+<a class="switcher" href="Desktop.html?view=desktop" title="切換到桌機版">↔️ 桌機版</a>
+<div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+<!-- 自助建立學員 Modal -->
+<div id="modalNewMask" class="modal-mask" role="dialog" aria-modal="true" aria-labelledby="modalNewTitle">
+  <div class="modal">
+    <h3 id="modalNewTitle">不在名單？自助建立學員</h3>
+    <label>工號</label>
+    <input id="newEmp" type="text" placeholder="例如：A123456" autocomplete="off">
+    <label>Function（職能，可空）</label>
+    <input id="newFunction" type="text" placeholder="Function" autocomplete="off">
+    <label>Team（必填）</label>
+    <input id="newTeam" type="text" placeholder="Team(組站)" autocomplete="off">
+    <label>姓名</label>
+    <input id="newName" type="text" placeholder="英文" autocomplete="off">
+    <div class="row" style="margin-top:12px;justify-content:flex-end">
+      <button id="btnCancelNew" class="btn ghost inline" type="button">取消</button>
+      <button id="btnSaveNew" class="btn inline" type="button">建立</button>
+    </div>
+  </div>
+</div>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.105.4/dist/umd/supabase.js"></script>
+<!-- Phase 2: 共用模組 -->
+<script src="src/config.js"></script>
+<script src="src/utils.js"></script>
+<script src="src/api.js"></script>
+<script src="src/broadcast.js"></script>
+<script src="src/checkin.js"></script>
+<script>
+
+/* ===== Phase 2 共用模組解構 ===== */
+const { SUPABASE_URL, SUPABASE_ANON_KEY } = window.CQE.config;
+const sb = window.CQE.sb;
+const { escapeHtml, getInitials, fmt, todayStr } = window.CQE.utils;
+const { rest } = window.CQE.api;
+const { doCheckin } = window.CQE.checkin;
+
+/* ===== App 程式 ===== */
+
+const $ = (q)=>document.querySelector(q);
+const selCourse = $('#selCourse'), btnReload=$('#btnReload');
+const q = $('#q'), list = $('#list'), emptyMsg=$('#emptyMsg');
+const emp = $('#emp'), btnIn=$('#btnIn'), btnClear=$('#btnClear'), msg=$('#msg');
+const modalMask = $('#modalNewMask'), newEmp=$('#newEmp'), newName=$('#newName'), newTeam=$('#newTeam'), newFunction=$('#newFunction');
+const btnCancelNew=$('#btnCancelNew'), btnSaveNew=$('#btnSaveNew');
+
+$('#todayTxt').textContent = '今天：' + todayStr();
+
+/* Toast（支援 success / dup / error） */
+function toast(text, type='success'){
+  const el = $('#toast');
+  el.textContent = text;
+  el.classList.remove('success','dup','error');
+  if (type==='success' || type==='dup' || type==='error'){ el.classList.add(type); }
+  el.classList.add('show');
+  clearTimeout(el.__t);
+  el.__t = setTimeout(()=> el.classList.remove('show'), 2500);
+}
+
+/* ===== 狀態與工具 ===== */
+let STUDENTS = [];
+let CHECKED = new Set();
+let __isSubmitting = false;
+// === Mobile 端 Postgres Realtime 訂閱 ===
+let __rtCh = null;
+function setupRealtimeAttendanceMobile(courseId){
+  try{
+    if (__rtCh){
+      sb.removeChannel(__rtCh);
+      __rtCh = null;
+    }
+    if (!courseId) return;
+
+    const cidStr = String(courseId);
+
+    __rtCh = sb
+      .channel(`mobile-attendance-${cidStr}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',             // ← 只聽 INSERT（新報到）
+          schema: 'public',
+          table: 'attendance',
+          filter: `course_id=eq.${cidStr}`
+        },
+        (payload) => {
+          const sid = payload?.new?.student_id;
+          const cid = payload?.new?.course_id;
+          if (!sid || String(cid) !== String(currentCourseId)) return;
+
+          CHECKED.add(String(sid));  // ← 一律字串
+
+          const card = list.querySelector(`[data-sid="${String(sid)}"]`);
+          if (card){
+            card.classList.add('checked');
+            if (!card.querySelector('.tag-ok')){
+              const tag = document.createElement('span');
+              tag.className = 'tag-ok';
+              tag.textContent = '已報到';
+              card.appendChild(tag);
+            }
+          }
+          updateStats();
+        }
+      )
+      .subscribe((status, err) => {
+        if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+          console.warn('Mobile Realtime 訂閱異常：', status, err);
+        }
+      });
+  }catch(e){
+    console.warn('setupRealtimeAttendanceMobile 失敗：', e);
+  }
+}
+
+
+let currentCourseId = null;
+
+// 是否為「今日課程」（影響是否允許報到）
+let isTodayCourse = true;
+// 以 id 快取課程物件（用於切換時判斷日期）
+let COURSE_BY_ID = new Map();
+let __selectedFnMobile = null; // null = 全部
+
+/* ✅ 統計函式（已報到 / 未報到 / 參與率）＋縮放動畫 */
+let __prevStatsMobile = { checked:null, unchecked:null, rate:null }; // 👈 新增：記錄上次數值
+
+function updateStats(){
+  // 依目前選取的 Function Tab 過濾後再計算統計
+  const filteredStudents = __selectedFnMobile !== null
+    ? STUDENTS.filter(s => (s.function||'').trim() === __selectedFnMobile)
+    : STUDENTS;
+  const total   = filteredStudents.length;
+  const checked = filteredStudents.filter(s => CHECKED.has(String(s.id))).length;
+  const unchecked = Math.max(0, total - checked);
+  const rate = total > 0 ? Math.round(checked * 100 / total) : 0;
+
+  const tip = document.getElementById('tipCourse');
+  if (!tip) return;
+
+  if (isTodayCourse){
+    tip.classList.remove('warn','error');
+    tip.textContent = `已報到: ${checked} 人, 未報到: ${unchecked} 人, 參與率: ${rate}%`;
+
+    // 👇 關鍵：有變化就觸發縮放動畫
+    const changed =
+      __prevStatsMobile.checked   !== checked ||
+      __prevStatsMobile.unchecked !== unchecked ||
+      __prevStatsMobile.rate      !== rate;
+
+    if (changed){
+      tip.classList.remove('bump'); // 先移除
+      void tip.offsetWidth;         // 強制回流，重置動畫
+      tip.classList.add('bump');    // 再加回去就會播放
+    }
+
+    __prevStatsMobile = { checked, unchecked, rate };
+  }else{
+    tip.classList.remove('error');
+    tip.classList.add('warn');
+    tip.textContent = '*非當日課程,無法報到';
+  }
+}
+
+
+/* 依 isTodayCourse 鎖定輸入與按鈕 */
+function applyCheckinLock(){
+  btnIn.disabled = !isTodayCourse;
+  emp.disabled   = !isTodayCourse;
+  updateStats();
+}
+
+/* 今日課程（若無 → fallback 下一場課程唯讀） */
+async function loadTodayCourses(){
+  selCourse.innerHTML = '';
+  COURSE_BY_ID.clear();
+  isTodayCourse = true;
+
+  try{
+    const today = todayStr();
+
+    // 1) 先抓「今日」的課程
+    let rows = await rest('/rest/v1/courses?select=*&date=eq.'+today);
+    if (rows?.length){
+      selCourse.append(new Option('請選擇課程',''));
+      rows.sort((a,b)=> (a.start_time||'').localeCompare(b.start_time||''));
+      rows.forEach(c=>{
+        COURSE_BY_ID.set(c.id, c);
+        const t = c.start_time? `（${c.start_time.slice(0,5)}~${(c.end_time||'').slice(0,5)}）` : '';
+        selCourse.append(new Option(`${c.title} ${t}`, c.id));
+      });
+      isTodayCourse = true;
+      applyCheckinLock();
+      if (rows.length===1){ 
+  selCourse.value = rows[0].id; 
+  await loadStudents();
+  // ✅ 確保第一次自動選課也立即訂閱
+  setupRealtimeAttendanceMobile(selCourse.value);
+} else {
+  const saved = sessionStorage.getItem('mobileCourseId');
+  if (saved && Array.from(selCourse.options).some(o => o.value === saved)){
+    selCourse.value = saved;
+    const c = COURSE_BY_ID.get(Number(saved)) || COURSE_BY_ID.get(saved);
+    isTodayCourse = !!(c && c.date === todayStr());
+    applyCheckinLock();
+    await loadStudents();
+    setupRealtimeAttendanceMobile(saved);
+  }
+}
+
+      return;
+    }
+
+    // 2) 沒有今日課 → 抓「下一場」未來課程
+    const next = await rest(`/rest/v1/courses?select=*&date=gt.${today}&order=date.asc,start_time.asc&limit=1`);
+    if (next?.length){
+      const c = next[0];
+      COURSE_BY_ID.set(c.id, c);
+      const t = c.start_time? `（${c.start_time.slice(0,5)}~${(c.end_time||'').slice(0,5)}）` : '';
+      selCourse.append(new Option(`${c.date} ${c.title} ${t}`, c.id));
+      selCourse.value = c.id;
+
+      isTodayCourse = false;      // 非今日 → 唯讀
+      applyCheckinLock();
+      await loadStudents();       // 顯示名單但禁止報到
+      return;
+    }
+
+    // 3) 完全沒有未來課程
+    selCourse.append(new Option('近期沒有課程',''));
+    isTodayCourse = false;
+    applyCheckinLock();
+    const tip = $('#tipCourse'); if (tip){ tip.textContent = '目前沒有可顯示的課程。'; tip.classList.add('warn'); }
+
+  }catch(e){
+    const tip = $('#tipCourse'); if (tip){ tip.textContent = '讀取課程失敗：'+e.message; tip.classList.add('error'); }
+  }
+}
+
+btnReload.addEventListener('click', loadTodayCourses);
+
+/* 切換課程時：判斷是否為今日課，鎖定/解鎖報到 */
+selCourse.addEventListener('change', async ()=>{
+  const cid = selCourse.value;
+  if (cid) sessionStorage.setItem('mobileCourseId', cid);
+  if (!cid){
+    isTodayCourse = true;
+    applyCheckinLock();
+    list.innerHTML = '';
+    emptyMsg.textContent = '請先選擇課程';
+
+    // 取消任何既有訂閱
+    setupRealtimeAttendanceMobile(null);
+    return;
+  }
+  const c = COURSE_BY_ID.get(cid);
+  isTodayCourse = !!(c && c.date === todayStr());
+  applyCheckinLock();
+  await loadStudents();
+
+  // ← 新增：切課後，訂閱該課程的 attendance 變更
+  setupRealtimeAttendanceMobile(cid);
+});
+
+
+/* Function Tab 渲染與切換 */
+function renderFnBar(){
+  const bar = document.getElementById('fnBar');
+  if (!bar) return;
+  bar.innerHTML = '';
+  const fns = [...new Set(STUDENTS.map(s => (s.function||'').trim()).filter(Boolean))].sort();
+  if (!fns.length){ bar.style.display = 'none'; return; }
+  bar.style.display = '';
+
+  const allBtn = document.createElement('button');
+  allBtn.type = 'button';
+  allBtn.className = 'fn-btn-m' + (__selectedFnMobile === null ? ' active' : '');
+  allBtn.textContent = '全部';
+  allBtn.addEventListener('click', () => selectFnMobile(null));
+  bar.appendChild(allBtn);
+
+  fns.forEach(fn => {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'fn-btn-m' + (__selectedFnMobile === fn ? ' active' : '');
+    btn.textContent = fn;
+    btn.addEventListener('click', () => selectFnMobile(fn));
+    bar.appendChild(btn);
+  });
+}
+
+function selectFnMobile(fn){
+  __selectedFnMobile = fn;
+  renderFnBar();
+  renderList();
+  updateStats();
+}
+
+/* 名單渲染 */
+function renderList(){
+  list.innerHTML = '';
+  const keyword = (q.value||'').trim().toLowerCase();
+  let rows = STUDENTS;
+
+  if (keyword){
+    rows = rows.filter(s =>
+      (s.function||'').toLowerCase().includes(keyword) ||
+      (s.team||'').toLowerCase().includes(keyword) ||
+      (s.name||'').toLowerCase().includes(keyword) ||
+      (s.employee_no||'').toLowerCase().includes(keyword)
+    );
+  }
+
+  if (__selectedFnMobile !== null){
+    rows = rows.filter(s => (s.function||'').trim() === __selectedFnMobile);
+  }
+
+  if (!rows.length){
+    emptyMsg.textContent = keyword ? '找不到符合的學員' : '尚未匯入學員名單';
+    updateStats(); // 即使空也刷新統計
+    return;
+  }
+  emptyMsg.textContent = '';
+
+rows.forEach(s=>{
+  const el = document.createElement('div');
+  const ok = CHECKED.has(String(s.id)); // ← 用字串判斷
+  el.className = 'item'+(ok?' checked':'');
+  el.innerHTML = `
+    <div class="av">${escapeHtml(getInitials(s.name||''))}</div>
+    <div>
+      <div class="name">${escapeHtml(s.name||'')}</div>
+      ${s.function ? `<div style="font-size:11px;color:var(--muted);margin-top:2px">${escapeHtml(s.function)}</div>` : ''}
+    </div>
+    ${ok?'<span class="tag-ok">已報到</span>':''}
+  `;
+  el.dataset.emp = s.employee_no || '';
+  el.dataset.sid = String(s.id); // ← DOM 上也放字串
+
+  el.addEventListener('click', async()=>{
+    if (!currentCourseId){ toast('請先選擇今日課程', 'error'); return; }
+    if (!isTodayCourse){ toast('此為「非今日課程」，僅供查看名單，無法報到。', 'error'); return; }
+    if (__isSubmitting) return;
+    __isSubmitting = true;
+    try{
+      const _r = await doCheckin(currentCourseId, { id: s.id });
+
+      CHECKED.add(String(s.id));            // ← 一律字串
+      el.classList.add('checked');
+      if (!el.querySelector('.tag-ok')){
+        const tag=document.createElement('span');
+        tag.className='tag-ok'; tag.textContent='已報到';
+        el.appendChild(tag);
+      }
+      toast(_r.duplicated ? '✅ 已報到（重複略過）' : '🎉 報到成功：'+(s.name||''), _r.duplicated ? 'dup' : 'success');
+      updateStats();
+    }catch(e){
+      toast('❌ 報到失敗：'+(e.message||''), 'error');
+    }finally{
+      __isSubmitting = false;
+    }
+  }, {passive:true});
+
+  list.appendChild(el);
+});
+
+
+  updateStats(); // 初次渲染後更新一次
+}
+
+/* 載入學員 + 當前課程出席情況 */
+async function loadStudents(){
+  list.innerHTML = ''; q.value='';
+  emptyMsg.textContent = '載入中…'; emptyMsg.className = 'note';
+  const cid = selCourse.value;
+
+  // ✅ 統一成字串，供 Broadcast/Realtime/比對使用
+  currentCourseId = cid ? String(cid) : null;
+
+  if (!cid){
+    setupRealtimeAttendanceMobile(null);
+    return;
+  }
+
+  try{
+    const studs = await rest('/rest/v1/students?select=*&limit=2000');
+    STUDENTS = Array.isArray(studs)? studs : [];
+    STUDENTS.sort((a,b)=> (a.name||'').localeCompare(b.name||'', 'en', {sensitivity:'base'}));
+    __selectedFnMobile = null; // 切換課程時重置 Function 篩選
+    renderFnBar();
+  }catch(e){
+    emptyMsg.textContent = '讀取學員失敗：'+e.message;
+    emptyMsg.classList.add('error'); return;
+  }
+
+  CHECKED = new Set();
+  try{
+    const att = await rest(`/rest/v1/attendance?select=student_id&course_id=eq.${encodeURIComponent(cid)}`);
+    (att||[]).forEach(a=> CHECKED.add(String(a.student_id))); // ← 一律字串
+  }catch(e){/* ignore */ }
+
+  renderList();
+
+  // ← 載入完就訂閱
+  setupRealtimeAttendanceMobile(cid);
+}
+
+
+/* 搜尋防抖 */
+let debounceT=null;
+q.addEventListener('input', ()=>{
+  clearTimeout(debounceT);
+  debounceT = setTimeout(renderList, 120);
+});
+
+/* 自助報到（輸入工號） */
+btnClear.addEventListener('click', ()=>{
+  emp.value=''; msg.textContent='';
+  emp.focus();
+});
+emp.addEventListener('keydown', (e)=>{
+  if (e.key==='Enter') btnIn.click();
+});
+
+btnIn.addEventListener('click', async()=>{
+  const cid = selCourse.value;
+  const v = (emp.value||'').trim();
+  if (!cid){ msg.textContent='請先選擇今日課程。'; msg.className='note warn'; return; }
+  if (!isTodayCourse){
+    /* ⬅︎ 依你的需求：非今日課程時，點自助報到要在下方顯示這句 */
+    msg.textContent='僅當日課程才能進行報到。';
+    msg.className='note warn';
+    return;
+  }
+  if (!v){ msg.textContent='請輸入工號。'; msg.className='note warn'; emp.focus(); return; }
+  if (__isSubmitting) return;
+  __isSubmitting = true;
+
+  try{
+    const stu = await rest('/rest/v1/students?select=*&employee_no=eq.'+encodeURIComponent(v));
+    if (!stu?.length){
+      // 開啟自助建立 Modal（預填工號）
+      openNewStudentModal(v);
+      return;
+    }
+    const s = stu[0];
+
+    const _r = await doCheckin(cid, { id: s.id });
+
+    // ★ 這行改為字串：String(s.id)
+    CHECKED.add(String(s.id));
+
+    msg.textContent = _r.duplicated ? '你今天已經報到過囉！' : '報到成功！'; msg.className='note ok';
+    toast(_r.duplicated ? '✅ 已報到（重複略過）' : '🎉 報到成功', _r.duplicated ? 'dup' : 'success');
+    emp.value='';
+
+    // 同步列表 UI：用 data-emp 對應 employee_no
+    const card = Array.from(list.children).find(x=> (x.dataset.emp||'') === (s.employee_no||''));
+    if (card){
+      card.classList.add('checked');
+      if (!card.querySelector('.tag-ok')){
+        const tag=document.createElement('span'); 
+        tag.className='tag-ok'; 
+        tag.textContent='已報到'; 
+        card.appendChild(tag);
+      }
+    }
+    updateStats(); // 成功報到 → 刷新統計
+  }catch(e){
+    msg.textContent='報到失敗：'+(e.message||''); msg.className='note error';
+    toast('❌ 報到失敗', 'error');
+  }finally{
+    __isSubmitting = false;
+  }
+});
+
+/* ====== 自助建立學員 Modal 行為 ====== */
+function openNewStudentModal(empNo=''){
+  newEmp.value = empNo;
+  newFunction.value = '';
+  newName.value = '';
+  newTeam.value = '';
+  modalMask.style.display = 'flex';
+  setTimeout(()=> newName.focus(), 0);
+}
+function closeNewStudentModal(){
+  modalMask.style.display = 'none';
+}
+
+// 關閉行為：取消、點遮罩、ESC
+btnCancelNew.addEventListener('click', closeNewStudentModal);
+modalMask.addEventListener('click', (e)=>{ if (e.target === modalMask) closeNewStudentModal(); });
+document.addEventListener('keydown', (e)=>{ if (e.key === 'Escape' && modalMask.style.display === 'flex') closeNewStudentModal(); });
+
+// 建立學員（Team 必填）並自動報到（僅今日課程）
+btnSaveNew.addEventListener('click', onSaveNewStudent);
+[newEmp,newName,newTeam,newFunction].forEach(el=>{
+  el.addEventListener('keydown', (e)=>{
+    if (e.key === 'Enter'){
+      e.preventDefault();
+      onSaveNewStudent();
+    }
+  }, {passive:false});
+});
+
+async function onSaveNewStudent(){
+  const empNo = (newEmp.value||'').trim();
+  const name  = (newName.value||'').trim();
+  const team  = (newTeam.value||'').trim();
+  const fn    = (newFunction.value||'').trim() || null;
+  if (!empNo || !name || !team){ toast('Team / 姓名 / 工號皆為必填','error'); return; }
+  if (__isSubmitting) return;
+  __isSubmitting = true;
+
+  try{
+    const ins = await rest('/rest/v1/students?select=*', {
+      method:'POST',
+      headers:{ 'Prefer':'return=representation' },
+      body: JSON.stringify({ employee_no: empNo, name, team, function: fn })
+    });
+    const s = Array.isArray(ins) ? ins[0] : ins;
+
+    // 若為今日課程則直接報到；否則只建立不報到
+    if (!currentCourseId || !isTodayCourse){
+      toast('已建立學員，但目前非今日課程，未執行報到。','dup');
+      closeNewStudentModal();
+      // 更新快取名單
+      STUDENTS.push(s);
+      STUDENTS.sort((a,b)=> (a.name||'').localeCompare(b.name||'', 'en', {sensitivity:'base'}));
+      renderList();
+      return;
+    }
+
+    await doCheckin(currentCourseId, { id: s.id });
+
+    // ★ 這行改為字串：String(s.id)
+    CHECKED.add(String(s.id));
+
+    toast('🎉 建立並報到成功','success');
+    closeNewStudentModal();
+
+    // 更新快取與畫面
+    emp.value = '';
+    STUDENTS.push(s);
+    STUDENTS.sort((a,b)=> (a.name||'').localeCompare(b.name||'', 'en', {sensitivity:'base'}));
+    renderList();
+
+  }catch(e){
+    toast('❌ 建立失敗：'+(e?.message||e),'error');
+  }finally{
+    __isSubmitting = false;
+  }
+}
+
+
+/* 初始化 */
+window.CQE.broadcast.ensureBroadcast(function(msg){
+  const p = msg?.payload || {};
+  if (!p.course_id || !p.student_id) return;
+  if (String(p.course_id) !== String(currentCourseId)) return;
+  CHECKED.add(String(p.student_id));
+  const card = list.querySelector(`[data-sid="${String(p.student_id)}"]`);
+  if (card){
+    card.classList.add('checked');
+    if (!card.querySelector('.tag-ok')){
+      const tag = document.createElement('span');
+      tag.className = 'tag-ok';
+      tag.textContent = '已報到';
+      card.appendChild(tag);
+    }
+  }
+  updateStats();
+});
+loadTodayCourses();
+
+</script>
+</body>
+</html>
