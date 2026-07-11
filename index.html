@@ -256,7 +256,9 @@ input.error{border-color:var(--danger);animation:shake .35s var(--ease) 0s 2}
   padding:2px 6px;border-radius:6px;border:1px solid;background:var(--glass);
   display:flex;flex-direction:column;line-height:1.35;
 }
-.cal-chip-name{font-size:13px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cal-chip-name-row{display:flex;align-items:baseline;gap:4px}
+.cal-chip-name{font-size:13px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1;min-width:0}
+.cal-chip-count{font-size:11px;font-weight:600;opacity:.85;white-space:nowrap;flex-shrink:0}
 .cal-chip-dept{font-size:12px;opacity:.85;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .cal-chip-time{font-size:12px;opacity:.7;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .cal-chip-room{font-size:12px;opacity:.7;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -265,6 +267,7 @@ input.error{border-color:var(--danger);animation:shake .35s var(--ease) 0s 2}
   .cal-cell{min-height:100px;padding:4px;border-radius:8px}
   .cal-daynum{font-size:11px}
   .cal-chip-name{font-size:9px}
+  .cal-chip-count{font-size:8px}
   .cal-chip-dept{font-size:8px}
   .cal-chip-time{font-size:8px}
   .cal-chip-room{display:none} /* 手機擠不下第四行, 地點僅在 drawer 顯示 */
@@ -746,6 +749,7 @@ input.cqe-dt-input{background:var(--core-2);color:var(--text);border:1px solid v
 
   /* ── C. 課程表月曆 ───────────────────────────────────────── */
   let coursesByDate = null; // Map<'YYYY-MM-DD', course[]>
+  let courseAttCount = null; // Map<course_id(string), 實際報到人數> — 過去式格子用
   let viewMonth = new Date(); viewMonth.setDate(1); viewMonth.setHours(0,0,0,0);
   let calendarLoaded = false;
 
@@ -776,10 +780,25 @@ input.cqe-dt-input{background:var(--core-2);color:var(--text);border:1px solid v
     return coursesByDate;
   }
 
+  async function loadAttCounts(){
+    if (courseAttCount) return courseAttCount;
+    courseAttCount = new Map();
+    try{
+      const rows = await rest('/rest/v1/attendance?select=course_id', { auth:false }) || [];
+      rows.forEach(r=>{
+        const k = String(r.course_id);
+        courseAttCount.set(k, (courseAttCount.get(k) || 0) + 1);
+      });
+    }catch(e){
+      console.warn('[CQE] 讀取報到人數失敗：', e.message || e);
+    }
+    return courseAttCount;
+  }
+
   async function initCalendar(){
     // Add 鈕只給管理員 (有後台 JWT); 資料與後台同一張 courses 表, 兩邊天然一致
     $('#btnCalAdd').style.display = localStorage.getItem('sb_access_token') ? '' : 'none';
-    await loadCourses();
+    await Promise.all([loadCourses(), loadAttCounts()]);
     renderMonth();
     calendarLoaded = true;
   }
@@ -851,10 +870,20 @@ input.cqe-dt-input{background:var(--core-2);color:var(--text);border:1px solid v
         chip.style.color = col;
         chip.style.background = hexToRgba(col, .12);
 
-        const nameEl = document.createElement('div');
+        const nameRow = document.createElement('div');
+        nameRow.className = 'cal-chip-name-row';
+        const nameEl = document.createElement('span');
         nameEl.className = 'cal-chip-name';
         nameEl.textContent = course.title || '';
-        chip.appendChild(nameEl);
+        nameRow.appendChild(nameEl);
+        if (ds < today){ // 過去式課程: 名稱列右側顯示實際報到人數
+          const cnt = (courseAttCount && courseAttCount.get(String(course.id))) || 0;
+          const cntEl = document.createElement('span');
+          cntEl.className = 'cal-chip-count';
+          cntEl.textContent = cnt + '人';
+          nameRow.appendChild(cntEl);
+        }
+        chip.appendChild(nameRow);
 
         const deptEl = document.createElement('div');
         deptEl.className = 'cal-chip-dept';
