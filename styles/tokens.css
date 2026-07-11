@@ -1,0 +1,62 @@
+/* ═══════════════════════════════════════════════════════════════
+   CQE AI Class Check-In System — Shared Design Tokens
+   修改此檔案即可同步所有介面的設計風格
+   引用此檔的頁面：Desktop.html / Mobile.html / 測試環境/Desktop.html
+   ═══════════════════════════════════════════════════════════════ */
+
+/* ── dark-yh 硬底線 token (devproj-yh rules/ui-spec.md) ────────── */
+:root{
+  color-scheme:dark;
+  --bg:#050505; --core:#0A0A0D; --core-2:#0D0D11;
+  --glass:rgba(255,255,255,.04); --glass-hi:rgba(255,255,255,.07);
+  --line:rgba(255,255,255,.08); --line-hi:rgba(255,255,255,.17);
+  --inset-hi:inset 0 1px 1px rgba(255,255,255,.09);
+  --text:#EFF1F8; --muted:#A2AAC0; --dim:#727C93;
+  --accent:#5BB8FF; --accent-2:#7C8CFF; --accent-glow:rgba(91,184,255,.35);
+  --ok:#34D399; --warn:#FBBF24; --danger:#F87171;
+  --ease:cubic-bezier(.32,.72,0,1);
+  --r-out:1.6rem; --r-in:calc(1.6rem - 7px);
+  --font:'Space Grotesk','Noto Sans TC','Microsoft JhengHei',sans-serif;
+  --mono:'JetBrains Mono','Cascadia Code',Consolas,monospace;
+
+  /* 向下相容別名：Desktop.html 本輪未重做, 仍用舊 token 名稱, 對應到新值 */
+  --card: var(--core);
+  --fg: var(--text);
+  --fg-muted: var(--muted);
+  --border: var(--line);
+  --radius: var(--r-out);
+  --gap: 12px;
+  --chip: var(--glass);
+}
+
+/* ── Scrollbar 全站深色化 (硬規則, Webkit + Firefox 兩組缺一不可) ── */
+::-webkit-scrollbar{ width:6px; height:6px; }
+::-webkit-scrollbar-track{ background:transparent; }
+::-webkit-scrollbar-thumb{ background:linear-gradient(180deg, rgba(91,184,255,.3), rgba(124,140,255,.24)); border-radius:99px; }
+::-webkit-scrollbar-thumb:hover{ background:linear-gradient(180deg, rgba(91,184,255,.55), rgba(124,140,255,.45)); }
+::-webkit-scrollbar-corner{ background:transparent; }
+* { scrollbar-width: thin; scrollbar-color: rgba(91,184,255,.4) transparent; }
+
+/* ── 統計數字更新縮放動畫（stat-bump）────────────────────── */
+@keyframes stat-bump {
+  0%   { transform: scale(1);    opacity: .85; }
+  35%  { transform: scale(1.06);               }
+  100% { transform: scale(1);    opacity: 1;   }
+}
+
+/* 通用觸發類別：JS 動態加入 .bump 即可觸發動畫 */
+.bump {
+  animation: stat-bump .45s var(--ease);
+}
+
+/* ── 重新整理按鈕旋轉動畫（spin-once）──────────────────────── */
+@keyframes spin-once {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+
+/* ── 進場動畫（fade-up + blur）：Mobile.html data-reveal 用 ─── */
+@keyframes reveal-in {
+  from { opacity:0; transform:translateY(16px); filter:blur(6px); }
+  to   { opacity:1; transform:translateY(0);    filter:blur(0);   }
+}

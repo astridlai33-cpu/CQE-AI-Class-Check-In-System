@@ -1,0 +1,1806 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>CQE | AI Class Hub</title>
+<link rel="icon" href="bear-logo_(Security C).ico" type="image/x-icon">
+<meta name="description" content="CQE AI Class 入口: 通關驗證, 導覽 hub, 課程表查詢">
+<link rel="stylesheet" href="styles/tokens.css">
+
+<style>
+*{box-sizing:border-box}
+html,body{height:100%}
+body{
+  margin:0;background:var(--bg);color:var(--text);
+  font:16px/1.55 var(--font);-webkit-font-smoothing:antialiased;
+  animation:fadeIn .6s var(--ease);
+}
+@keyframes fadeIn{from{opacity:0}to{opacity:1}}
+@keyframes shake{0%,100%{transform:translateX(0)}25%{transform:translateX(-6px)}75%{transform:translateX(6px)}}
+@keyframes cfPulseA{0%,100%{opacity:1}50%{opacity:.4}}
+@keyframes cfPulseB{0%,100%{opacity:.4}50%{opacity:1}}
+
+.screen{display:none;min-height:100dvh}
+.screen.is-active{display:block}
+
+/* ── 雙層 bezel 卡片 (與 Mobile.html/Desktop.html 同款) ────────── */
+.panel{background:var(--glass);border:1px solid var(--line);border-radius:var(--r-out);padding:6px}
+.panel-inner{background:var(--core);border-radius:var(--r-in);box-shadow:var(--inset-hi);padding:24px}
+
+/* ── 按鈕：外框式 pill, 禁實心填色 ──────────────────────────── */
+.btn{
+  appearance:none;border:1px solid var(--line-hi);background:var(--glass);color:var(--accent);
+  border-radius:999px;padding:12px 18px;cursor:pointer;font-weight:600;
+  font-family:var(--font);font-size:15px;line-height:1.2;
+  transition:border-color .2s var(--ease), background .2s var(--ease), transform .15s var(--ease);
+}
+.btn:hover{background:var(--glass-hi);border-color:var(--accent)}
+.btn:active{transform:scale(.97)}
+.btn:focus-visible{outline:none;border-color:rgba(91,184,255,.5);box-shadow:0 0 0 4px rgba(91,184,255,.09)}
+.btn.ghost{color:var(--muted)}
+
+.icon-btn{
+  display:inline-flex;align-items:center;justify-content:center;
+  width:40px;height:40px;border-radius:999px;flex-shrink:0;
+  background:var(--glass);border:1px solid var(--line);color:var(--text);font-size:16px;cursor:pointer;
+  transition:border-color .2s var(--ease), background .2s var(--ease), transform .15s var(--ease);
+}
+.icon-btn:hover{background:var(--glass-hi);border-color:var(--line-hi)}
+.icon-btn:active{transform:scale(.94)}
+.icon-btn:focus-visible{outline:none;border-color:rgba(91,184,255,.5);box-shadow:0 0 0 4px rgba(91,184,255,.09)}
+
+input{
+  width:100%;padding:14px 16px;border-radius:14px;
+  border:1px solid var(--line);background:var(--core-2);color:var(--text);font-size:16px;
+  font-family:var(--mono);letter-spacing:3px;text-align:center;text-transform:uppercase;
+  transition:border-color .2s var(--ease), box-shadow .2s var(--ease);
+}
+input::placeholder{color:var(--dim);letter-spacing:normal;font-family:var(--font);text-transform:none}
+input:focus-visible{outline:none;border-color:rgba(91,184,255,.5);box-shadow:0 0 0 4px rgba(91,184,255,.09)}
+input.error{border-color:var(--danger);animation:shake .35s var(--ease) 0s 2}
+
+/* ═══════════════ A. Portal ═══════════════
+   例外區塊 (ui-spec 第 6 節: Astrid 明示要求 > 本檔預設 token): 完整還原舊版視覺,
+   自成一套 token, 只在 #portalScreen 範圍內使用, 不與其他畫面的 dark-yh token 混用.
+   實心填色的 Enter 按鈕為明示例外, 照舊版照抄. ─────────────────────────────── */
+#portalScreen .stage{
+  position:relative;overflow:hidden;min-height:100dvh;display:flex;flex-direction:column;
+  align-items:center;justify-content:flex-start;padding:10vh 24px 24px;
+  background:linear-gradient(160deg,#060B18 0%,#0A1428 60%,#0f1115 100%);
+  animation:fadeIn .4s ease;
+}
+.portal-glow{position:absolute;pointer-events:none;border-radius:50%;z-index:0}
+.portal-glow-a{top:30%;left:50%;transform:translate(-50%,-50%);width:400px;height:400px;
+  background:radial-gradient(circle, rgba(56,189,248,.06) 0%, transparent 70%);}
+.portal-glow-b{bottom:10%;right:20%;width:200px;height:200px;
+  background:radial-gradient(circle, rgba(129,140,248,.05) 0%, transparent 70%);}
+.bg-glows{position:fixed;inset:0;pointer-events:none;z-index:0;overflow:hidden}
+.portal-heading{position:relative;z-index:1;text-align:center;margin-bottom:28px;display:flex;flex-direction:column;align-items:center}
+.portal-logo-img{width:72px;height:72px;object-fit:contain;margin-bottom:14px}
+.portal-h1{margin:0 0 8px;font-size:34px;font-weight:900;color:#0070C0;letter-spacing:6px;text-transform:uppercase;
+  font-family:'Microsoft YaHei','微軟雅黑',system-ui,sans-serif;text-shadow:0 2px 10px rgba(0,0,0,.9)}
+.portal-h2{margin:0;font-weight:700;font-size:28px;color:#e7ebf2}
+@media (max-width:480px){
+  .portal-h1{font-size:22px;letter-spacing:3px}
+  .portal-h2{font-size:18px}
+}
+.portal-card{
+  position:relative;z-index:1;background:#151922;border:1px solid #273043;border-radius:14px;
+  padding:40px 36px;width:440px;max-width:90vw;box-shadow:0 20px 60px rgba(0,0,0,.5);
+}
+.portal-label{display:block;margin-bottom:10px;text-align:center;font-size:18px;color:#9aa5b1;font-weight:500;letter-spacing:1px}
+.code-row{position:relative}
+.inp-pw{
+  background:#0e131b;border:1.5px solid #273043;border-radius:12px;color:#e7ebf2;font-family:inherit;
+  padding:12px 16px;font-size:15px;width:100%;outline:none;transition:border-color .2s;
+  letter-spacing:3px;text-align:center;
+}
+.code-row .inp-pw{padding-right:52px}
+.inp-pw:focus{border-color:#0070C0}
+.inp-pw.err{border-color:#ff645d!important;animation:shake .3s ease}
+.code-toggle{
+  position:absolute;right:12px;top:50%;transform:translateY(-50%);
+  background:none;border:none;color:#9aa5b1;cursor:pointer;font-size:16px;padding:4px;
+}
+.portal-msg{min-height:16px;font-size:11px;color:#ff645d;text-align:center;margin:8px 0 12px}
+.portal-enter{
+  width:100%;background:#256D3D;color:#fff;border:none;border-radius:8px;font-weight:700;font-size:14px;
+  padding:11px;text-shadow:0 2px 6px rgba(0,0,0,.5);cursor:pointer;font-family:inherit;
+  transition:opacity .2s;
+}
+.portal-enter:hover{opacity:.85}
+.portal-footer{position:relative;z-index:1;margin-top:20px;font-size:13px;color:#9aa5b1;text-align:center}
+
+/* ═══════════════ 第 9 項: 假 VS Code 打字背景 (portal + 課程表共用) ═══════════════ */
+.vs-bg{
+  position:absolute;top:50%;left:55%;transform:translate(-50%,-50%) scale(1.1) rotate(-3deg);
+  width:90vw;height:80vh;z-index:0;opacity:.42;
+  font-family:'Courier New',Consolas,monospace;font-size:16px;line-height:1.6;
+  padding:40px;background:#1e1e1e;border-radius:10px;box-shadow:0 0 50px rgba(0,0,0,.5);
+  display:flex;gap:20px;overflow:hidden;pointer-events:none;
+}
+.vs-lines{color:#858585;text-align:right;white-space:pre;min-width:28px}
+.vs-code{color:#d4d4d4;white-space:pre;overflow:hidden;flex:1}
+.vs-cursor{display:inline-block;width:7px;background:#22d3ee;animation:vsBlink 1s step-end infinite}
+@keyframes vsBlink{0%,100%{opacity:1}50%{opacity:0}}
+.vs-kw{color:#569cd6}.vs-ct{color:#c586c0}.vs-st{color:#ce9178}.vs-cm{color:#6a9955}
+.vs-fn{color:#dcdcaa}.vs-vr{color:#9cdcfe}.vs-nm{color:#b5cea8}.vs-nr{color:#d4d4d4}
+@media (max-width:768px){.vs-bg{font-size:12px;padding:24px}}
+
+/* ═══════════════ B. Hub ═══════════════
+   例外區塊 (ui-spec 第 6 節: Astrid 明示要求 > 本檔預設 token): 完整還原舊版視覺,
+   自成一套 token, 只在 #hubScreen 範圍內使用, 不與其他畫面的 dark-yh token 混用.
+   實心填色的 Enter 按鈕與 transition:all 皆為明示例外, 照舊版逐項照抄. ─────────── */
+#hubScreen{background:#0f1115;position:relative;overflow:hidden}
+.vs-bg.hub-vs{position:fixed;left:58%}
+.hub-nav{
+  position:relative;z-index:1;height:62px;background:#151922;border-bottom:1px solid #1b2130;
+  display:flex;align-items:center;gap:12px;padding:0 24px;
+}
+.hub-nav-logo{width:40px;height:40px;border-radius:10px;object-fit:contain}
+.hub-nav-title{font-weight:800;font-size:18px;color:#e7ebf2}
+.hub-main{
+  position:relative;z-index:1;padding:48px 32px 32px;text-align:center;
+  display:flex;flex-direction:column;align-items:center;
+}
+.hub-logo-big{width:72px;height:72px;object-fit:contain;margin-bottom:16px}
+.hub-h1{
+  margin:0;font-size:34px;font-weight:900;color:#0070C0;letter-spacing:6px;text-transform:uppercase;
+  font-family:'Microsoft YaHei','微軟雅黑',system-ui,sans-serif;text-shadow:0 2px 10px rgba(0,0,0,.9);
+}
+.hub-greet{margin-top:6px;font-size:12px;color:#9aa5b1;text-shadow:0 1px 4px rgba(0,0,0,.7)}
+.hub-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:28px;max-width:860px;margin:32px auto 0;width:100%}
+@media (max-width:600px){.hub-grid{grid-template-columns:1fr}}
+.hub-card{
+  border-radius:16px;padding:40px 36px;cursor:pointer;transition:all .3s;
+  background:rgba(21,25,34,.92);border:1px solid #273043;text-align:center;position:relative;overflow:hidden;
+}
+.hub-card::before{
+  content:'';position:absolute;top:-50%;left:-75%;width:50%;height:200%;
+  background:linear-gradient(105deg,transparent 20%,rgba(255,255,255,.08) 50%,transparent 80%);
+  transform:skewX(-15deg);transition:left .85s ease;pointer-events:none;
+}
+.hub-card:hover::before{left:160%}
+.hub-card:hover{
+  transform:translateY(-4px);
+  box-shadow:0 16px 48px rgba(0,0,0,.6),0 0 0 1px rgba(255,255,255,.09),inset 0 1px 0 rgba(255,255,255,.12);
+  border-color:#4a6fa5;backdrop-filter:blur(8px);
+}
+.hub-card-sub{
+  font-size:21px;color:var(--hub-accent);letter-spacing:3px;font-weight:900;text-transform:uppercase;margin-bottom:10px;
+  font-family:'Microsoft YaHei','微軟雅黑',system-ui,sans-serif;
+}
+.hub-card-title{font-weight:700;font-size:21px;color:#e7ebf2;margin-bottom:14px}
+.hub-card-enter{
+  margin-top:24px;background:var(--hub-accent);color:#fff;border-radius:8px;padding:13px 0;
+  font-size:17px;font-weight:700;letter-spacing:2px;text-align:center;text-shadow:0 2px 6px rgba(0,0,0,.5);
+}
+
+/* ═══════════════ C. 課程表月曆 ═══════════════ */
+/* 打字背景太搶焦點, 加一層霧感遮罩壓在背景之上/內容之下; fixed 層符合 ui-spec backdrop-blur 限制 */
+.cal-wrap{max-width:1320px;margin:0 auto;padding:20px;min-height:100dvh;padding-bottom:24px;position:relative;z-index:1}
+/* 磨砂玻璃面板: 只蓋月曆本體 (不吃滿版), blur 掛在不捲動的 ::before 裝飾層,
+   .cal-frost 本身隨頁面捲動 (非獨立 overflow 容器), 符合 ui-spec R7 附註限制 */
+.cal-frost{position:relative;isolation:isolate;border:1px solid var(--line);border-radius:var(--r-out);padding:16px}
+.cal-frost::before{
+  content:'';position:absolute;inset:0;z-index:-1;border-radius:inherit;
+  background:rgba(5,5,5,.45);backdrop-filter:blur(14px);
+}
+.cal-head{display:flex;align-items:center;gap:10px;margin-bottom:16px;flex-wrap:wrap}
+.cal-logo{width:36px;height:36px;border-radius:11px;overflow:hidden;flex-shrink:0;cursor:pointer}
+.cal-logo img{width:100%;height:100%;object-fit:contain}
+.month-label-wrap{position:relative}
+.cal-head .month-label{
+  appearance:none;background:none;border:1px solid transparent;border-radius:10px;padding:4px 10px;cursor:pointer;
+  font-size:18px;font-weight:700;color:var(--text);min-width:110px;font-family:var(--font);text-align:left;
+  transition:border-color .2s var(--ease), background .2s var(--ease);
+}
+.cal-head .month-label:hover{border-color:var(--line-hi);background:var(--glass)}
+.cal-head .month-label:focus-visible{outline:none;border-color:rgba(91,184,255,.5);box-shadow:0 0 0 4px rgba(91,184,255,.09)}
+.month-picker{
+  position:absolute;top:calc(100% + 8px);left:0;z-index:60;width:264px;
+  background:var(--core);border:1px solid var(--line-hi);border-radius:16px;padding:12px;
+  box-shadow:0 18px 50px rgba(0,0,0,.55);
+}
+.month-picker.hide{display:none}
+.mp-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
+.mp-head button{
+  appearance:none;background:var(--glass);border:1px solid var(--line);color:var(--text);border-radius:999px;
+  cursor:pointer;font-family:var(--font);font-size:13px;padding:4px 12px;
+  transition:border-color .2s var(--ease), color .2s var(--ease);
+}
+.mp-head button:hover{border-color:var(--accent);color:var(--accent)}
+.mp-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
+.mp-grid button{
+  appearance:none;background:transparent;border:1px solid var(--line);color:var(--muted);border-radius:10px;
+  cursor:pointer;font-family:var(--font);font-size:13px;padding:8px 0;
+  transition:border-color .2s var(--ease), color .2s var(--ease), background .2s var(--ease);
+}
+.mp-grid button:hover{border-color:var(--line-hi);color:var(--text)}
+.mp-grid button.current{border-color:var(--accent);color:var(--accent);background:rgba(91,184,255,.1)}
+.month-count{font-size:12px;color:var(--muted);background:var(--glass);border:1px solid var(--line);border-radius:999px;padding:3px 10px;white-space:nowrap}
+.cal-head .spacer{flex:1}
+/* 只顯示週一~五 (Astrid 定案), 5 欄等寬滿版, 格子與內容整體放大 */
+.cal-weekdays{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:6px;margin-bottom:6px}
+.cal-weekdays div{text-align:center;font-size:12px;color:var(--muted);padding:4px 0}
+.cal-grid{
+  display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:6px;
+  touch-action:pan-y;transition:opacity .18s var(--ease);
+}
+.cal-grid.fading{opacity:0}
+/* 375px 下 7 欄硬擠會讓每欄只剩 ~38px, chip 文字完全不可讀 (實測 scrollWidth 遠大於 clientWidth).
+   手機改成橫向捲動: 每欄固定寬度, 保留可讀性, 犧牲"一眼看全週"換"每天看得清楚"; 表頭與格子共用同一組欄寬同步捲動.
+   刻意設計的橫向捲動 (同 Mobile.html #fnBar 案例), 走 ui-spec 3a 隱藏卷軸例外. */
+.cal-scroll{overflow-x:visible}
+@media (max-width:768px){
+  /* 只剩 5 欄後手機不需要橫向捲動, ‹ › 按鈕隱藏, 換月靠左右滑動手勢 (initCalSwipe 全尺寸啟用) */
+  #btnPrevMonth, #btnNextMonth{display:none}
+}
+.cal-cell{
+  min-height:138px;padding:6px;border-radius:12px;border:1px solid var(--line);background:var(--core-2);
+  cursor:pointer;display:flex;flex-direction:column;gap:4px;overflow:hidden;
+  transition:border-color .2s var(--ease), background .2s var(--ease);
+}
+.cal-cell:hover{border-color:var(--line-hi)}
+.cal-cell:focus-visible{outline:none;border-color:rgba(91,184,255,.5);box-shadow:0 0 0 4px rgba(91,184,255,.09)}
+.cal-cell.other-month{opacity:.35}
+.cal-cell.today{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent) inset}
+.cal-cell.selected{background:var(--glass-hi)}
+.cal-daynum{font-size:13px;color:var(--muted);font-weight:600}
+.cal-cell.today .cal-daynum{color:var(--accent)}
+.cal-chips{display:flex;flex-direction:column;gap:3px;overflow:hidden}
+/* 課程 chip: 桌機固定四行 (課名/單位/時間/地點), 各自獨立一行不動態斷行 (Astrid 回饋 v4);
+   手機格子太窄放不下四行, 維持三行 (課名/單位/時間), 地點退回只在 drawer 顯示 (取捨見回報) */
+.cal-chip{
+  padding:2px 6px;border-radius:6px;border:1px solid;background:var(--glass);
+  display:flex;flex-direction:column;line-height:1.35;
+}
+.cal-chip-name{font-size:13px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cal-chip-dept{font-size:12px;opacity:.85;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cal-chip-time{font-size:12px;opacity:.7;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cal-chip-room{font-size:12px;opacity:.7;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cal-more{font-size:12px;color:var(--dim)}
+@media (max-width:768px){
+  .cal-cell{min-height:100px;padding:4px;border-radius:8px}
+  .cal-daynum{font-size:11px}
+  .cal-chip-name{font-size:9px}
+  .cal-chip-dept{font-size:8px}
+  .cal-chip-time{font-size:8px}
+  .cal-chip-room{display:none} /* 手機擠不下第四行, 地點僅在 drawer 顯示 */
+}
+.cal-empty{margin-top:16px;text-align:center;color:var(--muted);font-size:13px;padding:32px 16px;
+  border:1px dashed var(--line);border-radius:16px}
+
+/* ── 課程明細 drawer：桌機右側面板 / 手機底部 sheet, 皆為 overlay 不佔版位 ── */
+.drawer-mask{
+  position:fixed;inset:0;background:rgba(0,0,0,.55);backdrop-filter:blur(4px);
+  z-index:100;opacity:0;pointer-events:none;transition:opacity .25s var(--ease);
+}
+.drawer-mask.show{opacity:1;pointer-events:auto}
+.drawer{
+  position:fixed;top:0;right:0;height:100dvh;width:min(380px,100vw);
+  background:var(--core);border-left:1px solid var(--line);box-shadow:var(--inset-hi);
+  transform:translateX(100%);transition:transform .3s var(--ease);z-index:101;
+  padding:22px;display:flex;flex-direction:column;overflow:hidden; /* 捲動改交給 drawer-list, 讓名單吃滿剩餘高度 */
+}
+.drawer-mask.show .drawer{transform:translateX(0)}
+@media (max-width:768px){
+  .drawer{
+    top:auto;bottom:0;left:0;right:0;width:auto;height:auto;max-height:80dvh;
+    border-left:none;border-top:1px solid var(--line);border-radius:var(--r-out) var(--r-out) 0 0;
+    transform:translateY(100%);
+  }
+  .drawer-mask.show .drawer{transform:translateY(0)}
+}
+.drawer h3{margin:0 0 4px;color:var(--text);font-size:16px;flex-shrink:0}
+.drawer .drawer-sub{color:var(--muted);font-size:12px;margin-bottom:16px;flex-shrink:0}
+.drawer-close{position:absolute;top:14px;right:14px}
+/* flex column 取代 grid: 單一課程時該卡可 flex:1 吃滿剩餘高度, 多課程時維持自然高度 */
+.drawer-list{display:flex;flex-direction:column;gap:10px;flex:1;min-height:0;overflow-y:auto}
+.course-card{background:var(--core-2);border:1px solid var(--line);border-radius:14px;padding:12px 14px;flex-shrink:0}
+/* 當天只有一堂課時, 該卡與其報到名單一起撐滿 drawer 剩餘高度, 避免下方留白 */
+.course-card--fill{flex:1;min-height:0;display:flex;flex-direction:column}
+.course-card--fill .att-box{flex:1;min-height:0;display:flex;flex-direction:column}
+.course-card .row-top{display:flex;justify-content:space-between;align-items:flex-start;gap:8px}
+.course-card .row-top-right{display:flex;align-items:center;gap:8px;flex-shrink:0}
+/* 上課人數: 字級同課程名稱, 顏色同後台圖表 KPI (accent) */
+.course-card .att-count{font-weight:700;color:var(--accent);white-space:nowrap}
+.course-card .t{font-weight:700;color:var(--text);margin-bottom:4px;overflow-wrap:anywhere}
+/* 時間/地點單位各自獨立成行 (Astrid 回饋: 不要用 · 全部串在同一行) */
+.course-card .meta-row{font-size:12px;color:var(--muted);margin-top:2px}
+.drawer-empty{color:var(--muted);font-size:13px;padding:20px 0;text-align:center}
+.btn-tiny{
+  appearance:none;border:1px solid var(--line-hi);background:var(--glass);color:var(--accent);
+  border-radius:999px;padding:4px 12px;font-size:11px;font-weight:600;cursor:pointer;flex-shrink:0;
+  font-family:var(--font);transition:border-color .2s var(--ease), background .2s var(--ease);
+}
+.btn-tiny:hover{background:var(--glass-hi);border-color:var(--accent)}
+.btn-tiny:focus-visible{outline:none;border-color:rgba(91,184,255,.5);box-shadow:0 0 0 4px rgba(91,184,255,.09)}
+
+/* ── 報到學員名單 (第 8 項, v3: 一行一人 + 捲動, 單一課程時吃滿 drawer 剩餘高度) ── */
+.att-box{margin-top:10px}
+.att-title{font-size:12px;color:var(--muted);margin-bottom:6px;flex-shrink:0}
+/* 捲動容器: 不掛 backdrop-blur (ui-spec 禁止用在捲動容器); 卷軸沿用 tokens.css 全域深色樣式.
+   預設 (多課程同天) 給個上限高度避免互搶版位; .course-card--fill 情境下改 flex:1 吃滿剩餘高度 */
+.att-list{max-height:220px;overflow-y:auto;display:flex;flex-direction:column;gap:2px;padding-right:4px}
+.course-card--fill .att-list{max-height:none;flex:1;min-height:0}
+.att-row{display:flex;align-items:center;gap:8px;font-size:12px;padding:5px 2px;border-bottom:1px solid var(--line)}
+.att-row:last-child{border-bottom:none}
+.att-badge{
+  font-size:10px;padding:2px 8px;border-radius:999px;border:1px solid var(--line);color:var(--muted);
+  flex-shrink:0;min-width:44px;text-align:center;
+}
+.att-name{color:var(--text)}
+
+/* ── 課程編輯 modal (參照 Desktop.html .cqe-modal 套件, 換皮成本頁 token) ── */
+.cqe-modal-overlay{
+  position:fixed;inset:0;background:rgba(5,5,5,.6);backdrop-filter:blur(8px);
+  display:flex;align-items:center;justify-content:center;z-index:200;
+  opacity:0;pointer-events:none;transition:opacity .25s var(--ease);padding:20px;
+}
+.cqe-modal-overlay.show{opacity:1;pointer-events:auto}
+.cqe-modal{
+  position:relative;background:var(--glass);border:1px solid var(--line);border-radius:var(--r-out);
+  padding:22px;max-width:380px;width:100%;isolation:isolate;
+  transform:translateY(12px) scale(.98);transition:transform .25s var(--ease);
+}
+.cqe-modal-overlay.show .cqe-modal{transform:translateY(0) scale(1)}
+.cqe-modal::before{content:'';position:absolute;inset:6px;background:var(--core);border-radius:var(--r-in);box-shadow:var(--inset-hi);z-index:-1}
+.cqe-modal-title{margin:0 0 12px;font-size:16px;color:var(--text)}
+.cqe-modal-msg{color:var(--text);font-size:14px;line-height:1.6;white-space:pre-wrap}
+.cqe-modal-form{max-height:60vh;overflow-y:auto;padding-right:4px}
+.cqe-modal-form label{display:block;font-size:13px;color:var(--muted);margin:10px 0 6px}
+.cqe-modal-form input,.cqe-modal-form textarea{
+  width:100%;padding:10px 12px;border-radius:12px;border:1px solid var(--line);
+  background:var(--core-2);color:var(--text);font-family:var(--font);font-size:14px;
+  letter-spacing:normal;text-align:left;text-transform:none;
+  transition:border-color .2s var(--ease), box-shadow .2s var(--ease);
+}
+.cqe-modal-form input::placeholder,.cqe-modal-form textarea::placeholder{color:var(--dim)}
+.cqe-modal-form input:focus-visible,.cqe-modal-form textarea:focus-visible{
+  outline:none;border-color:rgba(91,184,255,.5);box-shadow:0 0 0 4px rgba(91,184,255,.09);
+}
+.cqe-modal-actions{margin-top:18px;display:flex;justify-content:flex-end;gap:10px}
+.cqe-modal-ok,.cqe-modal-cancel{
+  appearance:none;padding:8px 20px;border-radius:999px;cursor:pointer;font-weight:600;
+  font-family:var(--font);font-size:13px;transition:background .2s var(--ease), border-color .2s var(--ease), color .2s var(--ease);
+}
+.cqe-modal-ok{background:var(--glass);border:1px solid var(--accent);color:var(--accent)}
+.cqe-modal-ok:hover{background:rgba(91,184,255,.1)}
+.cqe-modal-ok:focus-visible{outline:none;border-color:rgba(91,184,255,.5);box-shadow:0 0 0 4px rgba(91,184,255,.09)}
+.cqe-modal-cancel{background:var(--glass);border:1px solid var(--line);color:var(--muted)}
+.cqe-modal-cancel:hover{border-color:var(--line-hi);color:var(--text)}
+.cqe-modal-cancel:focus-visible{outline:none;border-color:var(--line-hi);box-shadow:0 0 0 4px rgba(255,255,255,.06)}
+.cqe-modal-danger{
+  appearance:none;padding:8px 20px;border-radius:999px;cursor:pointer;font-weight:600;
+  font-family:var(--font);font-size:13px;transition:background .2s var(--ease), border-color .2s var(--ease);
+  background:rgba(248,113,113,.09);border:1px solid rgba(248,113,113,.4);color:var(--danger);
+}
+.cqe-modal-danger:hover{background:rgba(248,113,113,.16)}
+.cqe-modal-danger:focus-visible{outline:none;border-color:rgba(248,113,113,.6);box-shadow:0 0 0 4px rgba(248,113,113,.09)}
+/* ── 上課人次圖表面板 ── */
+.chart-overlay{
+  position:fixed;inset:0;background:rgba(5,5,5,.6);backdrop-filter:blur(8px);z-index:100;
+  display:none;align-items:center;justify-content:center;padding:20px;
+}
+.chart-overlay.show{display:flex}
+.chart-panel{
+  width:min(1100px, 94vw);max-height:92dvh;overflow-y:auto;
+  background:var(--core);border:1px solid var(--line-hi);border-radius:16px;padding:18px;
+}
+.chart-panel-head{display:flex;align-items:center;gap:12px;margin-bottom:10px;flex-wrap:wrap}
+.chart-panel-title{font-size:15px;font-weight:700;color:var(--text);flex:1}
+.chart-kpi{color:var(--accent);font-weight:800}
+.chart-mode{display:flex;gap:4px}
+.chart-mode-btn{
+  appearance:none;background:var(--glass);border:1px solid var(--line);color:var(--muted);
+  padding:6px 14px;border-radius:999px;cursor:pointer;font-family:var(--font);font-size:12px;font-weight:600;
+  transition:border-color .2s var(--ease), color .2s var(--ease), background .2s var(--ease);
+}
+.chart-mode-btn:hover{border-color:var(--line-hi);color:var(--text)}
+.chart-mode-btn.active{background:rgba(91,184,255,.1);border-color:var(--accent);color:var(--accent)}
+.chart-legend{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px;justify-content:center}
+.chart-legend-chip{
+  display:inline-flex;align-items:center;gap:6px;padding:4px 12px;border-radius:999px;
+  border:1px solid;font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;
+  cursor:pointer;user-select:none;transition:opacity .2s var(--ease);background:var(--glass);
+}
+.chart-legend-chip.is-hidden{opacity:.35}
+.chart-legend-chip .dot{width:7px;height:7px;border-radius:50%;flex-shrink:0}
+.chart-msg{margin-top:8px;font-size:12px;color:var(--muted)}
+/* 報到名單 Search (取代原「報到學員(n)」標題列, 高度收窄) */
+.att-head{margin-bottom:6px}
+.att-search{
+  width:100%;padding:4px 10px;font-size:12px;height:28px;border-radius:8px;
+  border:1px solid var(--line);background:var(--core-2);color:var(--text);font-family:var(--font);
+  letter-spacing:normal;text-align:left;text-transform:none;
+  transition:border-color .2s var(--ease), box-shadow .2s var(--ease);
+}
+.att-search::placeholder{color:var(--dim)}
+.att-search:focus-visible{outline:none;border-color:rgba(91,184,255,.5);box-shadow:0 0 0 4px rgba(91,184,255,.09)}
+/* 報到名單列的工號 (管理員限定顯示) */
+.att-id{margin-left:auto;font-size:11px;color:var(--dim);font-family:var(--mono);flex-shrink:0}
+.att-row:has(.att-id) .att-remove{margin-left:8px} /* 有 ID 時 ✕ 不再吃 margin-left:auto */
+/* 報到名單列的取消報到鈕 (管理員限定) */
+.att-remove{
+  appearance:none;margin-left:auto;flex-shrink:0;width:24px;height:24px;border-radius:50%;
+  background:transparent;border:1px solid rgba(248,113,113,.35);color:var(--danger);
+  font-size:11px;line-height:1;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;
+  transition:background .2s var(--ease), border-color .2s var(--ease);
+}
+.att-remove:hover{background:rgba(248,113,113,.12);border-color:rgba(248,113,113,.6)}
+.att-remove:disabled{opacity:.4;cursor:not-allowed}
+.att-remove:focus-visible{outline:none;border-color:rgba(248,113,113,.6);box-shadow:0 0 0 4px rgba(248,113,113,.09)}
+
+/* ── 深色日期/時間選擇器 (取代原生 type=date/time 彈窗, 視覺沿用 #monthPicker/.mp- 語言) ── */
+input.cqe-dt-input{background:var(--core-2);color:var(--text);border:1px solid var(--line);cursor:pointer}
+.cqe-dt-panel,.cqe-tm-panel{
+  position:fixed;z-index:300;max-width:calc(100vw - 16px);
+  background:var(--core);border:1px solid var(--line-hi);border-radius:16px;padding:12px;
+  box-shadow:0 18px 50px rgba(0,0,0,.55);font-family:var(--font);
+}
+.cqe-dt-panel{width:264px}
+.cqe-dt-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;gap:4px}
+.cqe-dt-head button{
+  appearance:none;background:var(--glass);border:1px solid var(--line);color:var(--text);border-radius:999px;
+  cursor:pointer;font-family:var(--font);font-size:13px;padding:4px 12px;
+  transition:border-color .2s var(--ease), color .2s var(--ease);
+}
+.cqe-dt-head button:hover{border-color:var(--accent);color:var(--accent)}
+.cqe-dt-weekdays{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;margin-bottom:4px}
+.cqe-dt-weekdays div{text-align:center;font-size:11px;color:var(--muted);padding:2px 0}
+.cqe-dt-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:4px}
+.cqe-dt-grid.months,.cqe-dt-grid.years{grid-template-columns:repeat(4,1fr)}
+.cqe-dt-grid button{
+  appearance:none;background:transparent;border:1px solid transparent;color:var(--muted);border-radius:10px;
+  cursor:pointer;font-family:var(--font);font-size:13px;padding:6px 0;
+  transition:border-color .2s var(--ease), color .2s var(--ease), background .2s var(--ease);
+}
+.cqe-dt-grid button:hover{border-color:var(--line-hi);color:var(--text)}
+.cqe-dt-grid button.other{opacity:.35}
+.cqe-dt-grid button.today{border-color:var(--accent);color:var(--accent)}
+.cqe-dt-grid button.selected{background:rgba(91,184,255,.15);border-color:var(--accent);color:var(--accent)}
+.cqe-dt-foot{display:flex;justify-content:space-between;margin-top:10px}
+.cqe-dt-foot button{
+  appearance:none;background:none;border:none;color:var(--accent);cursor:pointer;
+  font-family:var(--font);font-size:13px;padding:4px 8px;
+}
+.cqe-dt-foot button:hover{text-decoration:underline}
+.cqe-tm-panel{width:184px}
+.cqe-tm-cols{display:flex;gap:6px;align-items:stretch}
+.cqe-tm-col{flex:1;height:180px;overflow-y:auto;display:flex;flex-direction:column;gap:2px}
+.cqe-tm-col button{
+  appearance:none;background:transparent;border:1px solid transparent;color:var(--muted);border-radius:8px;
+  cursor:pointer;font-family:var(--mono);font-size:14px;padding:6px 0;text-align:center;flex-shrink:0;
+}
+.cqe-tm-col button:hover{border-color:var(--line-hi);color:var(--text)}
+.cqe-tm-col button.selected{background:rgba(91,184,255,.15);border-color:var(--accent);color:var(--accent);font-weight:700}
+.cqe-tm-sep{align-self:center;color:var(--muted);font-weight:700;font-family:var(--mono)}
+</style>
+</head>
+<body>
+
+<!-- ═══════════════ A. Portal (完整還原舊版視覺, 例外說明見上方 CSS 註解) ═══════════════ -->
+<section id="portalScreen" class="screen">
+  <div class="stage">
+    <div class="portal-glow portal-glow-a"></div>
+    <div class="portal-glow portal-glow-b"></div>
+    <div class="vs-bg" id="vsBgPortal" aria-hidden="true"><div class="vs-lines"></div><div class="vs-code"></div></div>
+    <div class="portal-heading">
+      <img class="portal-logo-img" src="bear-logo_(Security C).ico" alt="CQE Logo" onerror="this.style.display='none'">
+      <div class="portal-h1">CQE AI CLASS</div>
+      <h1 class="portal-h2">數位學習平台</h1>
+    </div>
+    <div class="portal-card">
+      <label class="portal-label" for="codeInput">輸入通關代碼</label>
+      <div class="code-row">
+        <input id="codeInput" class="inp-pw" type="password" placeholder="••••••" autocomplete="off" autocapitalize="off" spellcheck="false" maxlength="20">
+        <button id="codeToggle" class="code-toggle" type="button" aria-label="顯示/隱藏通關代碼">👁️</button>
+      </div>
+      <div id="portalMsg" class="portal-msg"></div>
+      <button id="btnEnter" class="portal-enter" type="button">Enter</button>
+    </div>
+    <div class="portal-footer">CQE | AI 數位 DNA計劃 @Astrid Lai</div>
+  </div>
+</section>
+
+<!-- ═══════════════ B. Hub (完整還原舊版視覺, 例外說明見上方 CSS 註解) ═══════════════ -->
+<section id="hubScreen" class="screen">
+  <div class="vs-bg hub-vs" id="vsBgHub" aria-hidden="true"><div class="vs-lines"></div><div class="vs-code"></div></div>
+  <nav class="hub-nav">
+    <img class="hub-nav-logo" src="bear-logo_(Security C).ico" alt="Logo">
+    <div class="hub-nav-title">CQE 數位學習平台</div>
+  </nav>
+  <div class="hub-main">
+    <img class="hub-logo-big" src="bear-logo_(Security C).ico" alt="CQE Logo">
+    <h1 class="hub-h1">CQE AI CLASS</h1>
+    <div class="hub-greet">您好，學員</div>
+    <div class="hub-grid">
+      <div class="hub-card" data-action="calendar" style="--hub-accent:#0070C0">
+        <div class="hub-card-sub">Course Scheduler</div>
+        <div class="hub-card-title">課程表</div>
+        <div class="hub-card-enter">Enter</div>
+      </div>
+      <div class="hub-card" data-action="checkin" style="--hub-accent:#256D3D">
+        <div class="hub-card-sub">Check-In System</div>
+        <div class="hub-card-title">上課報到</div>
+        <div class="hub-card-enter">Enter</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════ C. 課程表月曆 ═══════════════ -->
+<section id="calendarScreen" class="screen">
+  <div class="bg-glows">
+    <div class="vs-bg" id="vsBgCalendar" aria-hidden="true"><div class="vs-lines"></div><div class="vs-code"></div></div>
+    <div class="glow glow-a"></div>
+    <div class="glow glow-b"></div>
+  </div>
+  <div class="cal-wrap">
+    <div class="cal-frost">
+      <div class="cal-head">
+        <div class="cal-logo" id="calLogo" title="返回選單" role="button" tabindex="0"><img src="bear-logo_(Security C).ico" alt="CQE Logo"></div>
+        <div class="month-label-wrap">
+          <button type="button" class="month-label" id="monthLabel" title="點擊快速選擇年月"></button>
+          <div class="month-picker hide" id="monthPicker"></div>
+        </div>
+        <span class="month-count" id="monthCount"></span>
+        <button id="btnPrevMonth" class="icon-btn" type="button" title="上一月">‹</button>
+        <button id="btnNextMonth" class="icon-btn" type="button" title="下一月">›</button>
+        <button id="btnToday" class="btn ghost" type="button">今天</button>
+        <div class="spacer"></div>
+        <button id="btnCalAdd" class="btn ghost" type="button" style="display:none">Add</button>
+        <button id="btnCalChart" class="btn ghost" type="button">圖表</button>
+      </div>
+      <div class="cal-scroll">
+        <div class="cal-weekdays">
+          <div>一</div><div>二</div><div>三</div><div>四</div><div>五</div>
+        </div>
+        <div class="cal-grid" id="calGrid"></div>
+      </div>
+      <div class="cal-empty" id="calEmpty" style="display:none">本月尚無課程安排</div>
+    </div>
+  </div>
+</section>
+
+<!-- 課程明細 drawer -->
+<div id="drawerMask" class="drawer-mask">
+  <div class="drawer" role="dialog" aria-modal="true" aria-labelledby="drawerTitle">
+    <button class="icon-btn drawer-close" id="btnDrawerClose" type="button" aria-label="關閉">✕</button>
+    <h3 id="drawerTitle"></h3>
+    <div class="drawer-sub" id="drawerSub"></div>
+    <div class="drawer-list" id="drawerList"></div>
+  </div>
+</div>
+
+<!-- 上課人次圖表 (堆疊圖, 以 function 分類) -->
+<div id="chartOverlay" class="chart-overlay">
+  <div class="chart-panel" role="dialog" aria-modal="true">
+    <div class="chart-panel-head">
+      <div class="chart-panel-title">上課人次 <span id="calChartKpi" class="chart-kpi"></span></div>
+      <div class="chart-mode">
+        <button type="button" class="chart-mode-btn active" data-mode="daily">Daily</button>
+        <button type="button" class="chart-mode-btn" data-mode="month">Month</button>
+      </div>
+      <button class="icon-btn" id="btnChartClose" type="button" aria-label="關閉">✕</button>
+    </div>
+    <canvas id="calChart" height="120"></canvas>
+    <div id="calChartLegend" class="chart-legend"></div>
+    <div id="calChartMsg" class="chart-msg"></div>
+  </div>
+</div>
+
+<script src="src/config.js?v=20260710"></script>
+<script src="src/utils.js?v=20260710"></script>
+<script src="src/api.js?v=20260710"></script>
+<script>
+(function(){
+  'use strict';
+  const $ = (q)=>document.querySelector(q);
+  const { escapeHtml, fmt, todayStr } = window.CQE.utils;
+  const { rest } = window.CQE.api;
+  const PAL = window.CQE.config.PAL;
+
+  const GATE_CODE = 'QACQE';
+  const TICKET_TTL = 720 * 60 * 1000; // 12hr, 與 device-route.js 相容
+
+  function isMobileDevice(){
+    // 原版判斷式 (Astrid 逆向自舊 bundle), 取代先前粗略版本
+    return /iphone|android|ipad|mobile|tablet|windows phone/i.test(navigator.userAgent) || matchMedia('(max-width:820px)').matches;
+  }
+  function writeTicket(){
+    localStorage.setItem('cqe_gate_ok', JSON.stringify({ ok:true, exp: Date.now() + TICKET_TTL }));
+  }
+
+  /* ── 第 9 項: 假 VS Code 打字背景 (逆向自舊 bundle 的 AI_AutoReport VBA 範例) ── */
+  // 換行字元本身也是獨立 token (nr 級, 顏色與底色相同, 純粹佔位), 對齊需求給的逐 token 序列
+  const VS_TOKENS = [
+    { t:'Option Explicit', c:'kw' }, { t:'\n\n', c:'nr' },
+    { t:'Sub ', c:'kw' }, { t:'AI_AutoReport', c:'fn' }, { t:'()', c:'nr' }, { t:'\n', c:'nr' },
+    { t:'    ', c:'nr' }, { t:"' 由 AI 輔助生成的自動化報表程式碼", c:'cm' }, { t:'\n', c:'nr' },
+    { t:'    Dim ', c:'kw' }, { t:'ws ', c:'vr' }, { t:'As ', c:'kw' }, { t:'Worksheet', c:'ct' }, { t:'\n', c:'nr' },
+    { t:'    Dim ', c:'kw' }, { t:'lastRow ', c:'vr' }, { t:'As ', c:'kw' }, { t:'Long', c:'ct' }, { t:'\n', c:'nr' },
+    { t:'    Set ', c:'kw' }, { t:'ws ', c:'vr' }, { t:'= ', c:'nr' }, { t:'ActiveSheet', c:'ct' }, { t:'\n\n', c:'nr' },
+    { t:"    ' 1. 找出最後一行", c:'cm' }, { t:'\n', c:'nr' },
+    { t:'    lastRow ', c:'vr' }, { t:'= ', c:'nr' }, { t:'ws.Cells', c:'ct' }, { t:'(', c:'nr' },
+    { t:'ws.Rows.Count', c:'ct' }, { t:', ', c:'nr' }, { t:'1', c:'nm' }, { t:').End(xlUp).Row', c:'nr' }, { t:'\n\n', c:'nr' },
+    { t:"    ' 2. 迴圈檢查數據", c:'cm' }, { t:'\n', c:'nr' },
+    { t:'    Dim ', c:'kw' }, { t:'i ', c:'vr' }, { t:'As ', c:'kw' }, { t:'Long', c:'ct' }, { t:'\n', c:'nr' },
+    { t:'    For ', c:'ct' }, { t:'i ', c:'vr' }, { t:'= ', c:'nr' }, { t:'2 ', c:'nm' }, { t:'To ', c:'ct' }, { t:'lastRow', c:'vr' }, { t:'\n', c:'nr' },
+    { t:'        If ', c:'ct' }, { t:'ws.Cells', c:'ct' }, { t:'(', c:'nr' }, { t:'i', c:'vr' }, { t:', ', c:'nr' },
+    { t:'3', c:'nm' }, { t:').Value > ', c:'nr' }, { t:'1000 ', c:'nm' }, { t:'Then', c:'ct' }, { t:'\n', c:'nr' },
+    { t:'            ws.Cells', c:'ct' }, { t:'(', c:'nr' }, { t:'i', c:'vr' }, { t:', ', c:'nr' }, { t:'5', c:'nm' },
+    { t:').Value = ', c:'nr' }, { t:'"High Priority"', c:'st' }, { t:'\n', c:'nr' },
+    { t:'            ws.Cells', c:'ct' }, { t:'(', c:'nr' }, { t:'i', c:'vr' }, { t:', ', c:'nr' }, { t:'5', c:'nm' },
+    { t:').Interior.Color = ', c:'nr' }, { t:'vbRed', c:'ct' }, { t:'\n', c:'nr' },
+    { t:'        End If', c:'ct' }, { t:'\n', c:'nr' },
+    { t:'    Next ', c:'ct' }, { t:'i', c:'vr' }, { t:'\n\n', c:'nr' },
+    { t:'    MsgBox ', c:'fn' }, { t:'"AI 分析完成！"', c:'st' }, { t:', ', c:'nr' }, { t:'vbInformation', c:'ct' }, { t:'\n', c:'nr' },
+    { t:'End Sub', c:'kw' }
+  ];
+  const VS_LINE_OFFSET = 12; // 行號 = 目前行數 + 12, 模擬檔案上方還有內容
+
+  function createVsTyper(mountId){
+    const mount = document.getElementById(mountId);
+    if (!mount) return { start(){}, stop(){} };
+    const linesEl = mount.querySelector('.vs-lines');
+    const codeEl = mount.querySelector('.vs-code');
+    let timer = null, tokenIdx = 0, charIdx = 0, currentLine = 1, currentSpan = null, cursorEl = null;
+
+    function updateLines(){
+      const arr = [];
+      for (let i=1;i<=currentLine;i++) arr.push(i + VS_LINE_OFFSET);
+      linesEl.textContent = arr.join('\n');
+    }
+    function reset(){
+      clearTimeout(timer);
+      tokenIdx = 0; charIdx = 0; currentLine = 1; currentSpan = null;
+      codeEl.innerHTML = '';
+      cursorEl = document.createElement('span');
+      cursorEl.className = 'vs-cursor';
+      cursorEl.textContent = ' ';
+      codeEl.appendChild(cursorEl);
+      updateLines();
+    }
+    function tick(){
+      if (tokenIdx >= VS_TOKENS.length){
+        timer = setTimeout(()=>{ reset(); tick(); }, 5000);
+        return;
+      }
+      const tok = VS_TOKENS[tokenIdx];
+      if (charIdx === 0){
+        currentSpan = document.createElement('span');
+        currentSpan.className = 'vs-' + tok.c;
+        codeEl.insertBefore(currentSpan, cursorEl);
+      }
+      const ch = tok.t[charIdx];
+      if (ch === '\n'){ currentLine++; updateLines(); }
+      currentSpan.appendChild(document.createTextNode(ch));
+      charIdx++;
+      if (charIdx >= tok.t.length){ tokenIdx++; charIdx = 0; }
+      const delay = ch === '\n' ? 130 : (Math.random()*30 + 10);
+      timer = setTimeout(tick, delay);
+    }
+    return {
+      start(){ reset(); timer = setTimeout(tick, 400); },
+      stop(){ clearTimeout(timer); timer = null; }
+    };
+  }
+  const vsPortalTyper = createVsTyper('vsBgPortal');
+  const vsCalTyper = createVsTyper('vsBgCalendar');
+  const vsHubTyper = createVsTyper('vsBgHub');
+
+  function showScreen(id){
+    document.querySelectorAll('.screen').forEach(s=> s.classList.toggle('is-active', s.id===id));
+    vsPortalTyper.stop();
+    vsCalTyper.stop();
+    vsHubTyper.stop();
+    if (id === 'portalScreen') vsPortalTyper.start();
+    else if (id === 'calendarScreen') vsCalTyper.start();
+    else if (id === 'hubScreen') vsHubTyper.start();
+  }
+
+  /* ── A. Portal ───────────────────────────────────────────── */
+  const codeInput = $('#codeInput'), codeToggle = $('#codeToggle'), btnEnter = $('#btnEnter'), portalMsg = $('#portalMsg');
+
+  codeToggle.addEventListener('click', ()=>{
+    const toText = codeInput.type === 'password';
+    codeInput.type = toText ? 'text' : 'password';
+    codeToggle.textContent = toText ? '🙈' : '👁️';
+  });
+
+  function submitCode(){
+    const v = (codeInput.value || '').trim().toUpperCase();
+    if (v === GATE_CODE){
+      sessionStorage.setItem('cqe_gate_ok', '1');
+      portalMsg.textContent = '';
+      enterHub();
+    } else {
+      portalMsg.textContent = '通行碼錯誤，請重試';
+      codeInput.classList.remove('err');
+      void codeInput.offsetWidth; // 強制回流以重播 shake
+      codeInput.classList.add('err');
+      setTimeout(()=> codeInput.classList.remove('err'), 1800);
+    }
+  }
+  btnEnter.addEventListener('click', submitCode);
+  codeInput.addEventListener('keydown', (e)=>{ if (e.key === 'Enter') submitCode(); });
+
+  /* ── B. Hub ──────────────────────────────────────────────── */
+  // 通關後一律停在 hub; 裝置判斷只發生在點「上課報到」卡的當下 (見下)
+  function enterHub(){
+    showScreen('hubScreen');
+  }
+
+  document.querySelectorAll('.hub-card').forEach(card=>{
+    card.addEventListener('click', ()=>{
+      const action = card.dataset.action;
+      if (action === 'checkin'){ writeTicket(); location.href = isMobileDevice() ? 'Mobile.html' : 'Desktop.html'; }
+      else if (action === 'calendar'){ showScreen('calendarScreen'); initCalendar(); }
+    });
+  });
+  $('#calLogo').addEventListener('click', ()=> showScreen('hubScreen'));
+  $('#calLogo').addEventListener('keydown', (e)=>{ if (e.key==='Enter' || e.key===' '){ e.preventDefault(); showScreen('hubScreen'); } });
+
+  /* ── C. 課程表月曆 ───────────────────────────────────────── */
+  let coursesByDate = null; // Map<'YYYY-MM-DD', course[]>
+  let viewMonth = new Date(); viewMonth.setDate(1); viewMonth.setHours(0,0,0,0);
+  let calendarLoaded = false;
+
+  function hashColor(key){
+    let h = 0;
+    for (let i=0;i<key.length;i++) h = (h*31 + key.charCodeAt(i)) >>> 0;
+    return PAL[h % PAL.length];
+  }
+  function hexToRgba(hex, a){
+    const n = parseInt(hex.replace('#',''), 16);
+    const r = (n>>16)&255, g=(n>>8)&255, b=n&255;
+    return `rgba(${r},${g},${b},${a})`;
+  }
+  function dateStr(y,m,d){ return y + '-' + fmt(m+1) + '-' + fmt(d); }
+
+  async function loadCourses(){
+    if (coursesByDate) return coursesByDate;
+    coursesByDate = new Map();
+    try{
+      const rows = await rest('/rest/v1/courses?select=id,title,date,start_time,end_time,room,dept&order=date.asc', { auth:false }) || [];
+      rows.forEach(c=>{
+        if (!coursesByDate.has(c.date)) coursesByDate.set(c.date, []);
+        coursesByDate.get(c.date).push(c);
+      });
+    }catch(e){
+      console.warn('[CQE] 讀取課程表失敗：', e.message || e);
+    }
+    return coursesByDate;
+  }
+
+  async function initCalendar(){
+    // Add 鈕只給管理員 (有後台 JWT); 資料與後台同一張 courses 表, 兩邊天然一致
+    $('#btnCalAdd').style.display = localStorage.getItem('sb_access_token') ? '' : 'none';
+    await loadCourses();
+    renderMonth();
+    calendarLoaded = true;
+  }
+
+  function renderMonth(){
+    const y = viewMonth.getFullYear(), m = viewMonth.getMonth();
+    $('#monthLabel').textContent = y + '年' + (m+1) + '月';
+
+    const grid = $('#calGrid');
+    grid.innerHTML = '';
+
+    const firstDow = (new Date(y, m, 1).getDay() + 6) % 7; // 0=週一
+    const daysInMonth = new Date(y, m+1, 0).getDate();
+    const daysInPrevMonth = new Date(y, m, 0).getDate();
+    const today = todayStr();
+
+    let monthHasCourse = false;
+    let monthCourseCount = 0, weekendCourseCount = 0;
+    for (let d=1; d<=daysInMonth; d++){
+      const n = (coursesByDate.get(dateStr(y, m, d)) || []).length;
+      monthCourseCount += n;
+      const dow = new Date(y, m, d).getDay();
+      if (dow === 0 || dow === 6) weekendCourseCount += n;
+    }
+    // 月曆只顯示一~五; 若有課落在週末要標示, 不能無聲消失 (實例: 2026-07-11 週六的 test 課)
+    $('#monthCount').textContent = monthCourseCount + ' 堂課' +
+      (weekendCourseCount ? '（' + weekendCourseCount + ' 堂在週末, 月曆未顯示）' : '');
+    const cells = [];
+    // 前月補格
+    for (let i=0;i<firstDow;i++){
+      const d = daysInPrevMonth - firstDow + i + 1;
+      const pm = m===0 ? 11 : m-1, py = m===0 ? y-1 : y;
+      cells.push({ y:py, m:pm, d, other:true });
+    }
+    // 本月
+    for (let d=1; d<=daysInMonth; d++) cells.push({ y, m, d, other:false });
+    // 後月補格 (補滿 42 格)
+    let next = 1;
+    while (cells.length < 42){
+      const nm = m===11 ? 0 : m+1, ny = m===11 ? y+1 : y;
+      cells.push({ y:ny, m:nm, d:next, other:true });
+      next++;
+    }
+
+    cells.forEach((c, idx)=>{
+      if (idx % 7 >= 5) return; // 只顯示週一~五 (Astrid 定案; 資料庫實查 28 堂課週末 0 堂)
+      const ds = dateStr(c.y, c.m, c.d);
+      const list = coursesByDate.get(ds) || [];
+      if (!c.other && list.length) monthHasCourse = true;
+
+      const cell = document.createElement('div');
+      cell.className = 'cal-cell' + (c.other ? ' other-month' : '') + (ds === today ? ' today' : '');
+      cell.tabIndex = 0;
+      cell.dataset.date = ds;
+
+      const num = document.createElement('div');
+      num.className = 'cal-daynum';
+      num.textContent = (c.m + 1) + '/' + c.d; // 月/日, 跨月補格同規則
+      cell.appendChild(num);
+
+      const chips = document.createElement('div');
+      chips.className = 'cal-chips';
+      // 桌機固定四行: 課名/單位/時間/地點; 手機格子放不下第四行, 靠 CSS 隱藏地點列 (取捨見回報)
+      list.slice(0,3).forEach(course=>{
+        const chip = document.createElement('div');
+        const col = hashColor(course.dept || course.title || '');
+        chip.className = 'cal-chip';
+        chip.style.borderColor = hexToRgba(col, .5);
+        chip.style.color = col;
+        chip.style.background = hexToRgba(col, .12);
+
+        const nameEl = document.createElement('div');
+        nameEl.className = 'cal-chip-name';
+        nameEl.textContent = course.title || '';
+        chip.appendChild(nameEl);
+
+        const deptEl = document.createElement('div');
+        deptEl.className = 'cal-chip-dept';
+        deptEl.textContent = course.dept || '—';
+        chip.appendChild(deptEl);
+
+        const timeEl = document.createElement('div');
+        timeEl.className = 'cal-chip-time';
+        timeEl.textContent = course.start_time
+          ? (course.start_time.slice(0,5) + '~' + (course.end_time||'').slice(0,5))
+          : '—';
+        chip.appendChild(timeEl);
+
+        if (course.room){
+          const roomEl = document.createElement('div');
+          roomEl.className = 'cal-chip-room';
+          roomEl.textContent = course.room;
+          chip.appendChild(roomEl); // 手機由 .cal-chip-room{display:none} 隱藏, 地點退回只在 drawer 顯示
+        }
+
+        chips.appendChild(chip);
+      });
+      if (list.length > 3){
+        const more = document.createElement('div');
+        more.className = 'cal-more';
+        more.textContent = '+' + (list.length - 3) + ' 更多';
+        chips.appendChild(more);
+      }
+      cell.appendChild(chips);
+
+      const openHandler = ()=> openDetail(ds);
+      cell.addEventListener('click', openHandler);
+      cell.addEventListener('keydown', (e)=>{ if (e.key==='Enter' || e.key===' '){ e.preventDefault(); openHandler(); } });
+
+      grid.appendChild(cell);
+    });
+
+    $('#calEmpty').style.display = monthHasCourse ? 'none' : '';
+  }
+
+  let currentDrawerDate = null;
+  const WEEKDAY_NAMES = ['一','二','三','四','五','六','日']; // 對齊 cal-weekdays 表頭 (週一起算)
+
+  function formatDrawerTitle(ds){
+    const [y, m, d] = ds.split('-').map(Number);
+    const dow = (new Date(y, m-1, d).getDay() + 6) % 7; // 0=週一
+    return y + '/' + m + '/' + d + ' (' + WEEKDAY_NAMES[dow] + ')';
+  }
+
+  function openDetail(ds){
+    currentDrawerDate = ds;
+    document.querySelectorAll('.cal-cell').forEach(el=> el.classList.toggle('selected', el.dataset.date===ds));
+    const list = (coursesByDate.get(ds) || []).slice().sort((a,b)=> (a.start_time||'').localeCompare(b.start_time||''));
+    $('#drawerTitle').textContent = formatDrawerTitle(ds);
+    $('#drawerSub').textContent = list.length ? (list.length + ' 場課程') : '當日無課程';
+    const box = $('#drawerList');
+    box.innerHTML = '';
+    const canEdit = !!localStorage.getItem('sb_access_token');
+    if (!list.length){
+      box.innerHTML = '<div class="drawer-empty">當日尚無排定課程</div>';
+    } else {
+      list.forEach(course=>{
+        const t = course.start_time ? (course.start_time.slice(0,5) + '~' + (course.end_time||'').slice(0,5)) : '';
+        // 時間/地點/單位同一行 (Astrid 回饋)
+        const metaParts = [];
+        if (t) metaParts.push(escapeHtml(t));
+        if (course.room) metaParts.push(escapeHtml(course.room));
+        if (course.dept) metaParts.push(escapeHtml(course.dept));
+        const card = document.createElement('div');
+        card.className = 'course-card' + (list.length === 1 ? ' course-card--fill' : '');
+        card.innerHTML =
+          '<div class="row-top"><div class="t">' + escapeHtml(course.title||'') + '</div>' +
+            '<div class="row-top-right">' +
+              (canEdit ? '<button type="button" class="btn-tiny" data-edit-id="'+escapeHtml(String(course.id))+'">編輯</button>' : '') +
+              '<span class="att-count"></span>' +
+            '</div>' +
+          '</div>' +
+          (metaParts.length ? '<div class="meta-row">' + metaParts.join(' · ') + '</div>' : '') +
+          '<div class="att-box" data-course-id="' + escapeHtml(String(course.id)) + '"><div class="att-title">載入中…</div></div>';
+        box.appendChild(card);
+        renderAttendanceBox(course.id, card.querySelector('.att-box'), card.querySelector('.att-count'));
+      });
+    }
+    $('#drawerMask').classList.add('show');
+  }
+  function closeDetail(){
+    $('#drawerMask').classList.remove('show');
+    document.querySelectorAll('.cal-cell.selected').forEach(el=> el.classList.remove('selected'));
+  }
+  $('#btnDrawerClose').addEventListener('click', closeDetail);
+  $('#drawerMask').addEventListener('click', (e)=>{ if (e.target === $('#drawerMask')) closeDetail(); });
+  document.addEventListener('keydown', (e)=>{ if (e.key === 'Escape' && $('#drawerMask').classList.contains('show')) closeDetail(); });
+
+  /* ── 課程卡「編輯」按鈕: 事件代理在 drawerList 上, 只掛一次 ── */
+  $('#drawerList').addEventListener('click', (e)=>{
+    const btn = e.target.closest('[data-edit-id]');
+    if (btn) editCourse(btn.dataset.editId);
+  });
+
+  /* ── 第 8 項: 報到學員名單 (唯讀, students 全表快取一次 + 各課 attendance 快取) ── */
+  let studentsCachePromise = null; // Promise<Map<String(id), {name, team}>>
+  const attendanceCache = new Map(); // course_id(string) → Promise<string[] student_id>
+
+  function loadStudentsCache(){
+    if (!studentsCachePromise){
+      studentsCachePromise = rest('/rest/v1/students?select=id,name,team,employee_no,function&limit=20000', { auth:false })
+        .then(rows=>{
+          const m = new Map();
+          (rows||[]).forEach(s=> m.set(String(s.id), { name:s.name||'', team:s.team||'', emp:s.employee_no||'', fn:s.function||'' }));
+          return m;
+        })
+        .catch(e=>{ studentsCachePromise = null; throw e; });
+    }
+    return studentsCachePromise;
+  }
+
+  // 2026-07-11 Astrid 定案: 報到名單開放匿名檢視 (Supabase 已加 attendance_read_all_anon 政策),
+  // 一律用 anon 讀, 不再卡管理員登入.
+  function loadAttendanceIds(courseId){
+    const key = String(courseId);
+    if (!attendanceCache.has(key)){
+      const p = rest('/rest/v1/attendance?select=student_id&course_id=eq.' + encodeURIComponent(courseId), { auth:false })
+        .then(rows=> (rows||[]).map(r=> String(r.student_id)))
+        .catch(e=>{ attendanceCache.delete(key); throw e; });
+      attendanceCache.set(key, p);
+    }
+    return attendanceCache.get(key);
+  }
+
+  async function renderAttendanceBox(courseId, el, countEl){
+    try{
+      const [ids, students] = await Promise.all([ loadAttendanceIds(courseId), loadStudentsCache() ]);
+      if (countEl) countEl.textContent = ids.length + ' 人';
+      if (!ids.length){
+        el.innerHTML = '<div class="att-title">尚無報到記錄</div>';
+        return;
+      }
+      const names = ids.map(id=>{
+        const s = students.get(id);
+        return s ? { id, name:s.name, team:s.team, emp:s.emp, fn:s.fn } : { id, name:id, team:'', emp:'', fn:'' };
+      });
+      // 排序 (0-9 → A-Z): 管理員 function > 部門碼 > 姓名; 匿名 function > 姓名
+      const canEdit = !!localStorage.getItem('sb_access_token');
+      const up = (v)=> (v||'').toUpperCase();
+      names.sort((a,b)=>
+        up(a.fn).localeCompare(up(b.fn)) ||
+        (canEdit ? up(a.team).localeCompare(up(b.team)) : 0) ||
+        up(a.name).localeCompare(up(b.name))
+      );
+      renderAttList(el, names, courseId, countEl);
+    }catch(e){
+      el.innerHTML = '<div class="att-title" style="color:var(--danger)">報到名單讀取失敗：' + escapeHtml(e.message||String(e)) + '</div>';
+    }
+  }
+
+  // 一行一人; 標題列改為 Search 框 (可搜 function/部門碼/姓名/ID, 匿名看不到的隱藏欄位也可搜)
+  function renderAttList(el, names, courseId, countEl){
+    const canEdit = !!localStorage.getItem('sb_access_token');
+
+    function rowsHtml(list){
+      if (!list.length) return '<div class="att-title">沒有符合的學員</div>';
+      // 欄位順序: function (所有人可見) → 部門碼 (管理員限定) → 姓名 → 工號 (管理員限定) → ✕ (管理員限定)
+      return list.map(n=>
+        '<div class="att-row">' +
+          (n.fn ? '<span class="att-badge">' + escapeHtml(n.fn) + '</span>' : '') +
+          (canEdit && n.team ? '<span class="att-badge">' + escapeHtml(n.team) + '</span>' : '') +
+          '<span class="att-name">' + escapeHtml(n.name||'') + '</span>' +
+          (canEdit && n.emp ? '<span class="att-id">' + escapeHtml(n.emp) + '</span>' : '') +
+          (canEdit ? '<button type="button" class="att-remove" data-sid="' + escapeHtml(String(n.id)) + '" data-sname="' + escapeHtml(n.name||'') + '" title="取消報到">✕</button>' : '') +
+        '</div>'
+      ).join('');
+    }
+
+    el.innerHTML =
+      '<div class="att-head"><input class="att-search" type="search" placeholder="Search" aria-label="搜尋報到學員"></div>' +
+      '<div class="att-list">' + rowsHtml(names) + '</div>';
+
+    const listEl = el.querySelector('.att-list');
+    const searchEl = el.querySelector('.att-search');
+
+    function bindRemove(){
+      if (!canEdit) return;
+      listEl.querySelectorAll('.att-remove').forEach(btn=>{
+        btn.addEventListener('click', async ()=>{
+          if (!(await showConfirm('確定取消「' + btn.dataset.sname + '」的報到記錄？'))) return;
+          btn.disabled = true;
+          try{
+            await rest('/rest/v1/attendance?course_id=eq.' + encodeURIComponent(courseId) +
+                       '&student_id=eq.' + encodeURIComponent(btn.dataset.sid),
+                       { method:'DELETE', auth:true });
+            attendanceCache.delete(String(courseId)); // 失效重抓
+            renderAttendanceBox(courseId, el, countEl);
+          }catch(e){
+            btn.disabled = false;
+            showAlert('取消報到失敗：' + (e.message||e));
+          }
+        });
+      });
+    }
+    bindRemove();
+
+    searchEl.addEventListener('input', ()=>{
+      const terms = searchEl.value.trim().toLowerCase().split(/[\s,]+/).filter(Boolean);
+      const filtered = !terms.length ? names : names.filter(n=>{
+        // 匿名看不到部門碼/ID 但仍可被搜尋 (Astrid 定案)
+        const hay = ((n.fn||'') + ' ' + (n.team||'') + ' ' + (n.name||'') + ' ' + (n.emp||'')).toLowerCase();
+        return terms.every(t=> hay.includes(t));
+      });
+      listEl.innerHTML = rowsHtml(filtered);
+      bindRemove();
+    });
+  }
+
+  // 深色風確認視窗 (兩鈕: 取消/確定-danger)
+  function showConfirm(message){
+    return new Promise(resolve=>{
+      const overlay = document.createElement('div');
+      overlay.className = 'cqe-modal-overlay';
+      overlay.innerHTML =
+        '<div class="cqe-modal" role="alertdialog" aria-modal="true">' +
+          '<div class="cqe-modal-msg"></div>' +
+          '<div class="cqe-modal-actions">' +
+            '<button type="button" class="cqe-modal-cancel">取消</button>' +
+            '<button type="button" class="cqe-modal-danger">確定</button>' +
+          '</div>' +
+        '</div>';
+      overlay.querySelector('.cqe-modal-msg').textContent = message;
+      document.body.appendChild(overlay);
+      requestAnimationFrame(()=> overlay.classList.add('show'));
+      function close(val){
+        overlay.classList.remove('show');
+        document.removeEventListener('keydown', onKey);
+        setTimeout(()=> overlay.remove(), 200);
+        resolve(val);
+      }
+      function onKey(e){
+        if (e.key === 'Escape') close(false);
+        if (e.key === 'Enter') close(true);
+      }
+      document.addEventListener('keydown', onKey);
+      overlay.addEventListener('click', e=>{ if (e.target === overlay) close(false); });
+      overlay.querySelector('.cqe-modal-cancel').addEventListener('click', ()=> close(false));
+      overlay.querySelector('.cqe-modal-danger').addEventListener('click', ()=> close(true));
+      overlay.querySelector('.cqe-modal-danger').focus();
+    });
+  }
+
+  /* ── 第 5 項: 深色風提示 / 表單 modal (換皮自 Desktop.html .cqe-modal 套件) ── */
+  function showAlert(message){
+    return new Promise(resolve=>{
+      const overlay = document.createElement('div');
+      overlay.className = 'cqe-modal-overlay';
+      overlay.innerHTML =
+        '<div class="cqe-modal" role="alertdialog" aria-modal="true">' +
+          '<div class="cqe-modal-msg"></div>' +
+          '<div class="cqe-modal-actions"><button type="button" class="cqe-modal-ok">確定</button></div>' +
+        '</div>';
+      overlay.querySelector('.cqe-modal-msg').textContent = message;
+      document.body.appendChild(overlay);
+      requestAnimationFrame(()=> overlay.classList.add('show'));
+      function close(){
+        overlay.classList.remove('show');
+        document.removeEventListener('keydown', onKey);
+        setTimeout(()=> overlay.remove(), 200);
+        resolve();
+      }
+      function onKey(e){ if (e.key === 'Escape') close(); }
+      document.addEventListener('keydown', onKey);
+      overlay.addEventListener('click', e=>{ if (e.target === overlay) close(); });
+      overlay.querySelector('.cqe-modal-ok').addEventListener('click', close);
+      overlay.querySelector('.cqe-modal-ok').focus();
+    });
+  }
+
+  function showFormModal({ title, fields }){
+    return new Promise(resolve=>{
+      const overlay = document.createElement('div');
+      overlay.className = 'cqe-modal-overlay';
+      const fieldsHtml = fields.map(f=>{
+        const type = f.type || 'text';
+        const val = escapeHtml(f.value ?? '');
+        const labelHtml = '<label>' + escapeHtml(f.label) + '</label>';
+        if (type === 'textarea') return labelHtml + '<textarea data-key="' + escapeHtml(f.key) + '" rows="3">' + val + '</textarea>';
+        return labelHtml + '<input data-key="' + escapeHtml(f.key) + '" type="' + type + '" value="' + val + '">';
+      }).join('');
+      overlay.innerHTML =
+        '<div class="cqe-modal" role="dialog" aria-modal="true">' +
+          (title ? '<h3 class="cqe-modal-title">' + escapeHtml(title) + '</h3>' : '') +
+          '<div class="cqe-modal-form">' + fieldsHtml + '</div>' +
+          '<div class="cqe-modal-actions">' +
+            '<button type="button" class="cqe-modal-cancel">取消</button>' +
+            '<button type="button" class="cqe-modal-ok">確定</button>' +
+          '</div>' +
+        '</div>';
+      document.body.appendChild(overlay);
+      requestAnimationFrame(()=> overlay.classList.add('show'));
+      const inputs = Array.from(overlay.querySelectorAll('[data-key]'));
+      inputs.forEach(el=>{
+        if (el.type === 'date') attachDatePicker(el);
+        else if (el.type === 'time') attachTimePicker(el);
+      });
+      let settled = false;
+      function close(result){
+        if (settled) return; settled = true;
+        overlay.classList.remove('show');
+        document.removeEventListener('keydown', onKey);
+        setTimeout(()=> overlay.remove(), 200);
+        resolve(result);
+      }
+      function submit(){
+        const out = {};
+        inputs.forEach(el=> out[el.dataset.key] = el.value);
+        close(out);
+      }
+      function onKey(e){
+        if (e.key === 'Escape'){ close(null); return; }
+        if (e.key === 'Enter' && e.target.tagName !== 'TEXTAREA'){ e.preventDefault(); submit(); }
+      }
+      document.addEventListener('keydown', onKey);
+      overlay.addEventListener('click', e=>{ if (e.target === overlay) close(null); });
+      overlay.querySelector('.cqe-modal-cancel').addEventListener('click', ()=> close(null));
+      overlay.querySelector('.cqe-modal-ok').addEventListener('click', submit);
+      if (inputs[0]) inputs[0].focus();
+    });
+  }
+
+  // ===== 深色日期/時間選擇器 (取代原生 type=date/time 彈窗; 視覺沿用月曆年月選擇器語言) =====
+  // 換皮不換值: 選完仍寫回 input.value (date:'YYYY-MM-DD', time:'HH:MM') 並 dispatch input/change,
+  // 下游讀 .value 的既有程式碼完全無感. 用法: attachDatePicker(input) / attachTimePicker(input)。
+  (function(){
+    let activeClose = null;
+    function closeActive(){ if (activeClose){ const c = activeClose; activeClose = null; c(); } }
+    function pad2(n){ return String(n).padStart(2,'0'); }
+    function fire(el){
+      el.dispatchEvent(new Event('input', { bubbles:true }));
+      el.dispatchEvent(new Event('change', { bubbles:true }));
+    }
+    // ponytail: 只在開面板當下定位一次, 不追蹤 resize/scroll — 這兩個表單面板短開短關, 加監聽是過度設計
+    function positionPanel(panel, input){
+      const r = input.getBoundingClientRect();
+      const pw = panel.offsetWidth || 264, ph = panel.offsetHeight || 320;
+      let left = r.left;
+      if (left + pw > window.innerWidth - 8) left = Math.max(8, window.innerWidth - pw - 8);
+      let top = r.bottom + 6;
+      if (top + ph > window.innerHeight - 8) top = Math.max(8, r.top - ph - 6);
+      panel.style.left = left + 'px';
+      panel.style.top = top + 'px';
+    }
+
+    function attachDatePicker(input){
+      if (input.dataset.cqeDp) return;
+      input.dataset.cqeDp = '1';
+      input.type = 'text';
+      input.readOnly = true;
+      input.classList.add('cqe-dt-input');
+      if (!input.placeholder) input.placeholder = '年/月/日';
+
+      function parseVal(){
+        const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(input.value || '');
+        return m ? { y:+m[1], m:+m[2]-1, d:+m[3] } : null;
+      }
+      function today(){ const t = new Date(); return { y:t.getFullYear(), m:t.getMonth(), d:t.getDate() }; }
+
+      let panel = null, view = 'days', vy = 0, vm = 0;
+
+      function render(){
+        if (view === 'days') renderDays();
+        else if (view === 'months') renderMonths();
+        else renderYears();
+      }
+      function renderDays(){
+        const sel = parseVal(), t = today();
+        const first = new Date(vy, vm, 1).getDay();
+        const daysInMonth = new Date(vy, vm+1, 0).getDate();
+        const daysInPrev = new Date(vy, vm, 0).getDate();
+        let cells = '';
+        for (let i=0;i<first;i++){
+          cells += '<button type="button" class="other" disabled>' + (daysInPrev - first + 1 + i) + '</button>';
+        }
+        for (let d=1; d<=daysInMonth; d++){
+          const isToday = t.y===vy && t.m===vm && t.d===d;
+          const isSel = sel && sel.y===vy && sel.m===vm && sel.d===d;
+          cells += '<button type="button" data-d="'+d+'" class="'+(isToday?'today ':'')+(isSel?'selected':'')+'">'+d+'</button>';
+        }
+        const rem = (7 - ((first + daysInMonth) % 7)) % 7;
+        for (let d=1; d<=rem; d++) cells += '<button type="button" class="other" disabled>'+d+'</button>';
+        panel.innerHTML =
+          '<div class="cqe-dt-head">' +
+            '<button type="button" data-act="pm">‹</button>' +
+            '<button type="button" data-act="ym">'+vy+'年'+(vm+1)+'月</button>' +
+            '<button type="button" data-act="nm">›</button>' +
+          '</div>' +
+          '<div class="cqe-dt-weekdays"><div>日</div><div>一</div><div>二</div><div>三</div><div>四</div><div>五</div><div>六</div></div>' +
+          '<div class="cqe-dt-grid">' + cells + '</div>' +
+          '<div class="cqe-dt-foot"><button type="button" data-act="clear">清除</button><button type="button" data-act="today">今天</button></div>';
+      }
+      function renderMonths(){
+        const names = ['1','2','3','4','5','6','7','8','9','10','11','12'];
+        panel.innerHTML =
+          '<div class="cqe-dt-head">' +
+            '<button type="button" data-act="py">‹</button>' +
+            '<button type="button" data-act="year">'+vy+'年</button>' +
+            '<button type="button" data-act="ny">›</button>' +
+          '</div>' +
+          '<div class="cqe-dt-grid months">' + names.map((n,i)=>
+            '<button type="button" data-m="'+i+'" class="'+(i===vm?'selected':'')+'">'+n+'月</button>'
+          ).join('') + '</div>';
+      }
+      function renderYears(){
+        const base = vy - 5;
+        let ys = '';
+        for (let y=base; y<base+12; y++){
+          ys += '<button type="button" data-y="'+y+'" class="'+(y===vy?'selected':'')+'">'+y+'</button>';
+        }
+        panel.innerHTML =
+          '<div class="cqe-dt-head"><button type="button" data-act="back">‹ 返回</button><span></span><span></span></div>' +
+          '<div class="cqe-dt-grid years">' + ys + '</div>';
+      }
+      function commit(y,m,d){
+        input.value = y + '-' + pad2(m+1) + '-' + pad2(d);
+        fire(input);
+        close();
+        input.focus();
+      }
+      function onClick(e){
+        const b = e.target.closest('button'); if (!b || b.disabled) return;
+        const act = b.dataset.act;
+        if (act === 'pm'){ vm--; if (vm<0){ vm=11; vy--; } render(); return; }
+        if (act === 'nm'){ vm++; if (vm>11){ vm=0; vy++; } render(); return; }
+        if (act === 'ym' || act === 'year'){ view = 'months'; render(); return; }
+        if (act === 'back'){ view = 'months'; render(); return; }
+        if (act === 'py'){ vy--; render(); return; }
+        if (act === 'ny'){ vy++; render(); return; }
+        if (act === 'clear'){ input.value=''; fire(input); close(); input.focus(); return; }
+        if (act === 'today'){ const t = today(); commit(t.y, t.m, t.d); return; }
+        if (b.dataset.y !== undefined){ vy = +b.dataset.y; view = 'months'; render(); return; }
+        if (b.dataset.m !== undefined){ vm = +b.dataset.m; view = 'days'; render(); return; }
+        if (b.dataset.d !== undefined){ commit(vy, vm, +b.dataset.d); return; }
+      }
+      function onDocDown(e){ if (panel && !panel.contains(e.target) && e.target !== input) close(); }
+      function onKeyDown(e){ if (e.key === 'Escape'){ close(); input.focus(); } }
+      function onFocusIn(e){ if (panel && !panel.contains(e.target) && e.target !== input) close(); }
+      // ponytail: 面板 fixed 定位是開面板當下算死的座標, 頁面/modal 內捲動不會跟著重算 —
+      // 捲動就直接關閉面板 (Astrid 回報的錨點飄移 bug 對策 b), 比重新錨定 anchor wrapper 省事且對 modal 內 overflow-y:auto 情境更穩.
+      // 只在「面板以外」的捲動 (頁面本身 / modal 內 overflow-y:auto 容器) 才關閉;
+      // 面板內部的捲動 (例如時間選擇器捲小時/分鐘清單, 或選中值 scrollIntoView 置中) 不可誤觸關閉.
+      function onScroll(e){ if (panel && !panel.contains(e.target)) close(); }
+
+      function open(){
+        closeActive();
+        const cur = parseVal() || today();
+        vy = cur.y; vm = cur.m; view = 'days';
+        panel = document.createElement('div');
+        panel.className = 'cqe-dt-panel';
+        panel.addEventListener('click', onClick);
+        document.body.appendChild(panel);
+        render();
+        positionPanel(panel, input);
+        document.addEventListener('mousedown', onDocDown, true);
+        document.addEventListener('keydown', onKeyDown, true);
+        document.addEventListener('focusin', onFocusIn, true);
+        document.addEventListener('scroll', onScroll, true);
+        activeClose = close;
+      }
+      function close(){
+        if (!panel) return;
+        document.removeEventListener('mousedown', onDocDown, true);
+        document.removeEventListener('keydown', onKeyDown, true);
+        document.removeEventListener('focusin', onFocusIn, true);
+        document.removeEventListener('scroll', onScroll, true);
+        panel.remove(); panel = null;
+        if (activeClose === close) activeClose = null;
+      }
+      input.addEventListener('click', ()=>{ panel ? close() : open(); });
+      input._cqeOpenPicker = ()=>{ panel ? close() : open(); };
+    }
+
+    function attachTimePicker(input){
+      if (input.dataset.cqeTp) return;
+      input.dataset.cqeTp = '1';
+      input.type = 'text';
+      input.readOnly = true;
+      input.classList.add('cqe-dt-input');
+      if (!input.placeholder) input.placeholder = '時:分';
+
+      function parseVal(){
+        const m = /^(\d{2}):(\d{2})$/.exec(input.value || '');
+        return m ? { h:+m[1], mi:+m[2] } : null;
+      }
+      let panel = null;
+      function onClick(e){
+        const b = e.target.closest('button'); if (!b) return;
+        if (b.dataset.act === 'clear'){ input.value=''; fire(input); close(); input.focus(); return; }
+        if (b.dataset.act === 'close'){ close(); input.focus(); return; }
+        if (b.dataset.h !== undefined){
+          panel.querySelectorAll('[data-h]').forEach(x=> x.classList.toggle('selected', x===b));
+        }
+        if (b.dataset.mi !== undefined){
+          panel.querySelectorAll('[data-mi]').forEach(x=> x.classList.toggle('selected', x===b));
+        }
+        const hEl = panel.querySelector('[data-h].selected'), mEl = panel.querySelector('[data-mi].selected');
+        if (hEl && mEl){ input.value = hEl.dataset.h + ':' + mEl.dataset.mi; fire(input); }
+      }
+      function onDocDown(e){ if (panel && !panel.contains(e.target) && e.target !== input) close(); }
+      function onKeyDown(e){ if (e.key === 'Escape'){ close(); input.focus(); } }
+      function onFocusIn(e){ if (panel && !panel.contains(e.target) && e.target !== input) close(); }
+      // ponytail: 面板 fixed 定位是開面板當下算死的座標, 頁面/modal 內捲動不會跟著重算 —
+      // 捲動就直接關閉面板 (Astrid 回報的錨點飄移 bug 對策 b), 比重新錨定 anchor wrapper 省事且對 modal 內 overflow-y:auto 情境更穩.
+      // 只在「面板以外」的捲動 (頁面本身 / modal 內 overflow-y:auto 容器) 才關閉;
+      // 面板內部的捲動 (例如時間選擇器捲小時/分鐘清單, 或選中值 scrollIntoView 置中) 不可誤觸關閉.
+      function onScroll(e){ if (panel && !panel.contains(e.target)) close(); }
+
+      function open(){
+        closeActive();
+        const cur = parseVal();
+        panel = document.createElement('div');
+        panel.className = 'cqe-tm-panel';
+        const hours = []; for (let h=0; h<24; h++) hours.push(pad2(h));
+        const mins = []; for (let m=0; m<60; m+=5) mins.push(pad2(m));
+        panel.innerHTML =
+          '<div class="cqe-tm-cols">' +
+            '<div class="cqe-tm-col" data-col="h">' + hours.map(h=>
+              '<button type="button" data-h="'+h+'" class="'+(cur && +h===cur.h?'selected':'')+'">'+h+'</button>'
+            ).join('') + '</div>' +
+            '<div class="cqe-tm-sep">:</div>' +
+            '<div class="cqe-tm-col" data-col="m">' + mins.map(m=>
+              '<button type="button" data-mi="'+m+'" class="'+(cur && +m===cur.mi?'selected':'')+'">'+m+'</button>'
+            ).join('') + '</div>' +
+          '</div>' +
+          '<div class="cqe-dt-foot"><button type="button" data-act="clear">清除</button><button type="button" data-act="close">完成</button></div>';
+        panel.addEventListener('click', onClick);
+        document.body.appendChild(panel);
+        positionPanel(panel, input);
+        panel.querySelectorAll('.selected').forEach(b=> b.scrollIntoView({ block:'center' }));
+        document.addEventListener('mousedown', onDocDown, true);
+        document.addEventListener('keydown', onKeyDown, true);
+        document.addEventListener('focusin', onFocusIn, true);
+        document.addEventListener('scroll', onScroll, true);
+        activeClose = close;
+      }
+      function close(){
+        if (!panel) return;
+        document.removeEventListener('mousedown', onDocDown, true);
+        document.removeEventListener('keydown', onKeyDown, true);
+        document.removeEventListener('focusin', onFocusIn, true);
+        document.removeEventListener('scroll', onScroll, true);
+        panel.remove(); panel = null;
+        if (activeClose === close) activeClose = null;
+      }
+      input.addEventListener('click', ()=>{ panel ? close() : open(); });
+      input._cqeOpenPicker = ()=>{ panel ? close() : open(); };
+    }
+
+    function initCqeDatePickers(root){
+      (root || document).querySelectorAll('input[type="date"]').forEach(attachDatePicker);
+      (root || document).querySelectorAll('input[type="time"]').forEach(attachTimePicker);
+    }
+    window.attachDatePicker = attachDatePicker;
+    window.attachTimePicker = attachTimePicker;
+    window.initCqeDatePickers = initCqeDatePickers;
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', ()=> initCqeDatePickers());
+    else initCqeDatePickers();
+  })();
+
+  /* ── 第 5 項: 管理員編輯課程 (需 sb_access_token; payload 格式對齊 Desktop.html editCourse) ── */
+  async function editCourse(id){
+    try{
+      const rows = await rest('/rest/v1/courses?select=*&id=eq.' + encodeURIComponent(id), { auth:true });
+      const c = rows?.[0];
+      if (!c){ await showAlert('找不到課程'); return; }
+      const fv = await showFormModal({ title:'編輯課程', fields:[
+        { key:'title', label:'課程名稱', value:c.title || '' },
+        { key:'date', label:'日期', value:c.date || '', type:'date' },
+        { key:'start_time', label:'開始時間（可空）', value:(c.start_time||'').slice(0,5), type:'time' },
+        { key:'end_time', label:'結束時間（可空）', value:(c.end_time||'').slice(0,5), type:'time' },
+        { key:'room', label:'上課地點（可空）', value:c.room || '' },
+        { key:'dept', label:'單位（可空）', value:c.dept || '' },
+        { key:'description', label:'說明（可空）', value:c.description || '', type:'textarea' }
+      ]});
+      if (fv === null) return;
+      const { title, date, start_time, end_time, room, dept, description } = fv;
+      const body = {
+        title, date,
+        start_time: start_time ? (start_time + ':00') : null,
+        end_time: end_time ? (end_time + ':00') : null,
+        room: room.trim() || null,
+        dept: dept.trim() || null,
+        description: description || null
+      };
+      await rest('/rest/v1/courses?id=eq.' + encodeURIComponent(id), { method:'PATCH', auth:true, body: JSON.stringify(body) });
+      // 只失效 courses 快取; attendance/students 快取保留 (第 8 項效能要求)
+      coursesByDate = null;
+      await loadCourses();
+      renderMonth();
+      if (currentDrawerDate) openDetail(currentDrawerDate);
+    }catch(e){
+      if (e.status === 401 || e.status === 403){
+        await showAlert('登入已過期, 請到管理後台重新登入');
+      } else {
+        await showAlert('更新失敗：' + (e.message || e));
+      }
+    }
+  }
+
+  /* ── 管理員從月曆直接新增課程 (寫同一張 courses 表, 後台自動一致) ── */
+  async function createCourse(){
+    try{
+      const fv = await showFormModal({ title:'新增課程', fields:[
+        { key:'title', label:'課程名稱', value:'' },
+        { key:'date', label:'日期', value:'', type:'date' },
+        { key:'start_time', label:'開始時間（可空）', value:'', type:'time' },
+        { key:'end_time', label:'結束時間（可空）', value:'', type:'time' },
+        { key:'room', label:'上課地點（可空）', value:'' },
+        { key:'dept', label:'單位（可空）', value:'' },
+        { key:'description', label:'說明（可空）', value:'', type:'textarea' }
+      ]});
+      if (fv === null) return;
+      if (!fv.title.trim() || !fv.date){
+        await showAlert('課程名稱與日期為必填');
+        return;
+      }
+      const body = {
+        title: fv.title.trim(),
+        date: fv.date,
+        start_time: fv.start_time ? (fv.start_time + ':00') : null,
+        end_time: fv.end_time ? (fv.end_time + ':00') : null,
+        room: fv.room.trim() || null,
+        dept: fv.dept.trim() || null,
+        description: fv.description || null
+      };
+      await rest('/rest/v1/courses', { method:'POST', auth:true, body: JSON.stringify(body) });
+      coursesByDate = null;
+      await loadCourses();
+      // 跳到新課程所在月份, 直接看得到剛建立的課
+      viewMonth = new Date(fv.date + 'T00:00:00'); viewMonth.setDate(1);
+      renderMonth();
+      await showAlert('課程已建立：' + body.title + '（' + body.date + '）');
+    }catch(e){
+      if (e.status === 401 || e.status === 403){
+        await showAlert('登入已過期, 請到管理後台重新登入');
+      } else {
+        await showAlert('建立失敗：' + (e.message || e));
+      }
+    }
+  }
+  $('#btnCalAdd').addEventListener('click', createCourse);
+
+  $('#btnPrevMonth').addEventListener('click', ()=>{ viewMonth.setMonth(viewMonth.getMonth()-1); renderMonth(); });
+  $('#btnNextMonth').addEventListener('click', ()=>{ viewMonth.setMonth(viewMonth.getMonth()+1); renderMonth(); });
+  $('#btnToday').addEventListener('click', ()=>{ viewMonth = new Date(); viewMonth.setDate(1); viewMonth.setHours(0,0,0,0); renderMonth(); });
+
+  /* ── 年月快速選擇器: 點年月開月份格, 點年份切年份格 ── */
+  (function initMonthPicker(){
+    const label = $('#monthLabel'), panel = $('#monthPicker');
+    let view = 'months', pYear = null;
+    function yearsRange(){
+      const ys = [new Date().getFullYear()];
+      if (coursesByDate) for (const k of coursesByDate.keys()) ys.push(+k.slice(0,4));
+      const min = Math.min(...ys), max = Math.max(...ys) + 1;
+      const arr = []; for (let y=min; y<=max; y++) arr.push(y);
+      return arr;
+    }
+    function render(){
+      if (view === 'months'){
+        const MONTH_ABBR = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+        panel.innerHTML =
+          '<div class="mp-head">' +
+            '<button type="button" data-act="py">‹</button>' +
+            '<button type="button" data-act="year">' + pYear + '年</button>' +
+            '<button type="button" data-act="ny">›</button>' +
+          '</div>' +
+          '<div class="mp-grid">' + MONTH_ABBR.map((abbr, i)=>{
+            const cur = pYear === viewMonth.getFullYear() && i === viewMonth.getMonth();
+            return '<button type="button" data-m="'+i+'"'+(cur?' class="current"':'')+'>'+abbr+'</button>';
+          }).join('') + '</div>';
+      } else {
+        panel.innerHTML =
+          '<div class="mp-head"><button type="button" data-act="back">‹ 返回</button>' +
+          '<span style="color:var(--muted);font-size:13px">選擇年份</span><span></span></div>' +
+          '<div class="mp-grid">' + yearsRange().map(y=>
+            '<button type="button" data-y="'+y+'"'+(y===pYear?' class="current"':'')+'>'+y+'</button>'
+          ).join('') + '</div>';
+      }
+    }
+    function open(){ pYear = viewMonth.getFullYear(); view = 'months'; render(); panel.classList.remove('hide'); }
+    function close(){ panel.classList.add('hide'); }
+    panel.addEventListener('click', (e)=>{
+      e.stopPropagation(); // 重繪後 e.target 已脫離 DOM, 不擋掉會被 document 的關閉判定誤關 (‹ › 沒反應的根因)
+      const b = e.target.closest('button'); if (!b) return;
+      if (b.dataset.act === 'py'){ pYear--; render(); }
+      else if (b.dataset.act === 'ny'){ pYear++; render(); }
+      else if (b.dataset.act === 'year'){ view = 'years'; render(); }
+      else if (b.dataset.act === 'back'){ view = 'months'; render(); }
+      else if (b.dataset.y){ pYear = +b.dataset.y; view = 'months'; render(); }
+      else if (b.dataset.m !== undefined){
+        viewMonth = new Date(pYear, +b.dataset.m, 1);
+        renderMonth();
+        close();
+      }
+    });
+    label.addEventListener('click', (e)=>{
+      e.stopPropagation();
+      panel.classList.contains('hide') ? open() : close();
+    });
+    document.addEventListener('click', (e)=>{
+      if (!panel.classList.contains('hide') && !panel.contains(e.target) && e.target !== label) close();
+    });
+  })();
+
+  /* ── 上課人次圖表 (堆疊圖以 function 分類, 色碼 follow 後台 CHART_PALETTE) ── */
+  (function initCalChart(){
+    const overlay = $('#chartOverlay'), canvas = $('#calChart'), msgEl = $('#calChartMsg');
+    let chart = null, mode = 'daily', allAttPromise = null;
+    const PALETTE = window.CQE.config.CHART_PALETTE;
+
+    function ensureChartJs(){
+      if (window.Chart) return Promise.resolve();
+      return new Promise((resolve, reject)=>{
+        const s = document.createElement('script');
+        s.src = 'https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js';
+        s.async = true; s.onload = resolve; s.onerror = ()=> reject(new Error('Chart.js 載入失敗'));
+        document.head.appendChild(s);
+      });
+    }
+    function loadAllAttendance(){
+      if (!allAttPromise){
+        allAttPromise = rest('/rest/v1/attendance?select=course_id,student_id', { auth:false })
+          .catch(e=>{ allAttPromise = null; throw e; });
+      }
+      return allAttPromise;
+    }
+    function lighten(hex, amt){
+      const n = parseInt(hex.replace('#',''), 16);
+      const r = Math.min(255, Math.max(0, (n>>16) + amt));
+      const g = Math.min(255, Math.max(0, (n>>8 & 255) + amt));
+      const b = Math.min(255, Math.max(0, (n & 255) + amt));
+      return '#' + [r,g,b].map(v=>v.toString(16).padStart(2,'0')).join('');
+    }
+    function fnColor(i){
+      const cycle = Math.floor(i / PALETTE.length);
+      const base = PALETTE[i % PALETTE.length];
+      return cycle === 0 ? base : lighten(base, cycle % 2 === 1 ? -30*cycle : 25*cycle);
+    }
+    function stackEdge(ctx, wantTop){
+      const c = ctx.chart, col = ctx.dataIndex;
+      const idxs = c.data.datasets
+        .map((d, di)=> d.type==='bar' ? di : -1)
+        .filter(di=> di>=0 && c.getDatasetMeta(di).hidden !== true && (c.data.datasets[di].data[col]||0) > 0);
+      if (!idxs.length) return false;
+      return ctx.datasetIndex === (wantTop ? idxs[idxs.length-1] : idxs[0]);
+    }
+    const badgeLabelPlugin = {
+      id: 'calBadgeLabel',
+      afterDatasetsDraw(c){
+        const font = getComputedStyle(document.documentElement).getPropertyValue('--font').trim() || 'sans-serif';
+        c.data.datasets.forEach((ds, di)=>{
+          if (!ds.isTotal) return;
+          const meta = c.getDatasetMeta(di);
+          const ctx = c.ctx;
+          ctx.save();
+          ctx.font = 'bold 12px ' + font;
+          ctx.fillStyle = '#EFF1F8';
+          ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
+          ctx.shadowColor = 'rgba(0,0,0,0.10)'; ctx.shadowOffsetX = 1.4; ctx.shadowOffsetY = -1.4;
+          meta.data.forEach((pt, i)=>{
+            const v = ds.data[i]; if (!v) return;
+            const p = pt.getProps(['x','y'], true);
+            ctx.fillText(String(v), p.x, p.y - 8);
+          });
+          ctx.restore();
+        });
+      }
+    };
+
+    async function renderChart(){
+      msgEl.textContent = '載入資料中…';
+      try{
+        await ensureChartJs();
+        const [att, students] = await Promise.all([ loadAllAttendance(), loadStudentsCache() ]);
+        await loadCourses();
+        const courses = [];
+        coursesByDate.forEach(list=> list.forEach(c=> courses.push(c)));
+        courses.sort((a,b)=> (a.date||'').localeCompare(b.date||'') || (a.start_time||'').localeCompare(b.start_time||''));
+
+        const labelByCourse = new Map(), labels = [], seen = new Set();
+        courses.forEach(c=>{
+          const lab = mode === 'month' ? String(c.date||'').slice(0,7) : (c.date + ' ' + (c.title||''));
+          labelByCourse.set(String(c.id), lab);
+          if (!seen.has(lab)){ seen.add(lab); labels.push(lab); }
+        });
+
+        const fnSet = new Set(), counts = {}, uniq = new Set();
+        (att||[]).forEach(r=>{
+          const lab = labelByCourse.get(String(r.course_id)); if (!lab) return;
+          const fn = (students.get(String(r.student_id)) || {}).fn || '未分類';
+          const key = fn + '::' + r.course_id + '::' + r.student_id;
+          if (uniq.has(key)) return;
+          uniq.add(key);
+          fnSet.add(fn);
+          (counts[fn] = counts[fn] || {})[lab] = (counts[fn][lab]||0) + 1;
+        });
+
+        const fns = Array.from(fnSet).sort((a,b)=> a.toUpperCase().localeCompare(b.toUpperCase()));
+        const chartFont = getComputedStyle(document.documentElement).getPropertyValue('--font').trim() || 'sans-serif';
+        const datasets = fns.map((fn, i)=>{
+          const color = fnColor(i);
+          return {
+            type:'bar', label:fn,
+            data: labels.map(l=> counts[fn]?.[l] || 0),
+            backgroundColor: color, hoverBackgroundColor: lighten(color, 35),
+            borderColor: color, borderWidth: 0, borderSkipped: false,
+            borderRadius: (ctx)=>{
+              const top = stackEdge(ctx, true), bottom = stackEdge(ctx, false);
+              return { topLeft: top?8:0, topRight: top?8:0, bottomLeft: bottom?8:0, bottomRight: bottom?8:0 };
+            },
+            barPercentage: 1, categoryPercentage: 0.7, order: 1
+          };
+        });
+        const totals = labels.map(l=> fns.reduce((s,fn)=> s + (counts[fn]?.[l]||0), 0));
+        $('#calChartKpi').textContent = '累計 ' + courses.length + ' 堂課 · ' + totals.reduce((a,b)=>a+b,0) + ' 人次';
+        // Total 不畫線不畫點 (Astrid 定案), 只留柱頂數字標籤與 tooltip 的 Total 項
+        datasets.push({
+          type:'line', label:'Total', data: totals,
+          showLine:false, borderWidth:0, backgroundColor:'#EFF1F8',
+          pointRadius:0, pointHoverRadius:0,
+          fill:false, order:9999, clip:false, isTotal:true
+        });
+        const yMax = Math.ceil(Math.max(0, ...totals) * 1.2) || 5;
+
+        if (chart){ chart.destroy(); chart = null; }
+        chart = new Chart(canvas.getContext('2d'), {
+          type:'bar',
+          data:{ labels, datasets },
+          options:{
+            responsive:true,
+            animation:{ duration:600, easing:'easeOutQuart' },
+            interaction:{ mode:'index', intersect:false },
+            scales:{
+              x:{ stacked:true, grid:{display:false}, border:{display:false},
+                ticks:{ color:'#A2AAC0', font:{size:11, family:chartFont},
+                  callback:function(v, i){
+                    const full = this.chart?.data?.labels?.[i] ?? '';
+                    const mm = /^(\d{4})-(\d{2})$/.exec(full);
+                    if (mm) return parseInt(mm[1],10) + '/' + parseInt(mm[2],10);
+                    const m = /(\d{4})-(\d{2})-(\d{2})/.exec(full);
+                    if (m) return parseInt(m[2],10) + '/' + parseInt(m[3],10);
+                    return full.length > 12 ? full.slice(0,12) + '…' : full;
+                  } } },
+              y:{ stacked:true, beginAtZero:true, max:yMax, border:{display:false},
+                grid:{ color:'rgba(255,255,255,0.06)', drawTicks:false },
+                ticks:{ color:'#A2AAC0', font:{size:11, family:chartFont}, padding:8 } }
+            },
+            plugins:{
+              legend:{ display:false },
+              tooltip:{
+                backgroundColor:'rgba(10,10,13,0.92)', borderColor:'rgba(91,184,255,0.35)', borderWidth:1,
+                titleColor:'#EFF1F8', bodyColor:'#A2AAC0', padding:10, cornerRadius:10,
+                titleFont:{family:chartFont}, bodyFont:{family:chartFont},
+                usePointStyle:true, boxWidth:8, boxHeight:8, boxPadding:6,
+                filter: (item)=> (item.parsed?.y || 0) > 0,
+                itemSort: (a,b)=> (b.dataset.isTotal?1:0) - (a.dataset.isTotal?1:0)
+              }
+            }
+          },
+          plugins:[badgeLabelPlugin]
+        });
+
+        // 自訂圖例 (function chips, 點擊切顯示)
+        const box = $('#calChartLegend');
+        box.innerHTML = fns.map((fn, i)=>{
+          const color = fnColor(i);
+          return '<button type="button" class="chart-legend-chip" data-i="'+i+'"' +
+            ' style="border-color:'+color+'40;color:'+color+'">' +
+            '<span class="dot" style="background:'+color+'"></span>' + escapeHtml(fn) + '</button>';
+        }).join('');
+        box.querySelectorAll('.chart-legend-chip').forEach(chip=>{
+          chip.addEventListener('click', ()=>{
+            const i = +chip.dataset.i;
+            const meta = chart.getDatasetMeta(i);
+            meta.hidden = meta.hidden === null ? !chart.data.datasets[i].hidden : !meta.hidden;
+            chip.classList.toggle('is-hidden', !!meta.hidden);
+            chart.update();
+          });
+        });
+        msgEl.textContent = '';
+      }catch(e){
+        msgEl.textContent = '圖表載入失敗：' + (e.message||e);
+      }
+    }
+
+    $('#btnCalChart').addEventListener('click', ()=>{ overlay.classList.add('show'); renderChart(); });
+    $('#btnChartClose').addEventListener('click', ()=> overlay.classList.remove('show'));
+    overlay.addEventListener('click', (e)=>{ if (e.target === overlay) overlay.classList.remove('show'); });
+    document.addEventListener('keydown', (e)=>{ if (e.key==='Escape' && overlay.classList.contains('show')) overlay.classList.remove('show'); });
+    document.querySelectorAll('#chartOverlay .chart-mode-btn').forEach(btn=>{
+      btn.addEventListener('click', ()=>{
+        if (btn.classList.contains('active')) return;
+        document.querySelectorAll('#chartOverlay .chart-mode-btn').forEach(x=>x.classList.toggle('active', x===btn));
+        mode = btn.dataset.mode;
+        renderChart();
+      });
+    });
+  })();
+
+  /* ── 拖曳換月：只判橫向, touch-action:pan-y 已保留垂直捲動 ──
+     768px 以下格子改橫向捲動看每天 (見 .cal-scroll), 橫向拖曳這時已另有用途 (捲日期),
+     故手機停用拖曳換月手勢, 改用 ‹ › 按鈕; 桌機/平板 (無橫向捲動衝突) 維持拖曳換月. ── */
+  function fadeSwitchMonth(dir){
+    const grid = $('#calGrid');
+    grid.classList.add('fading');
+    setTimeout(()=>{
+      viewMonth.setMonth(viewMonth.getMonth() + dir);
+      renderMonth();
+      grid.classList.remove('fading');
+    }, 160);
+  }
+  (function initCalSwipe(){
+    const grid = $('#calGrid');
+    let sx = 0, sy = 0, tracking = false;
+    grid.addEventListener('pointerdown', (e)=>{ sx = e.clientX; sy = e.clientY; tracking = true; });
+    grid.addEventListener('pointerup', (e)=>{
+      if (!tracking) return;
+      tracking = false;
+      // 5 欄制後無橫向捲動衝突, 手機/桌機皆可左右滑動換月
+      const dx = e.clientX - sx, dy = e.clientY - sy;
+      if (Math.abs(dx) > 60 && Math.abs(dx) > Math.abs(dy)) fadeSwitchMonth(dx < 0 ? 1 : -1);
+    });
+    grid.addEventListener('pointercancel', ()=>{ tracking = false; });
+  })();
+
+  /* ── 進入點：ref=desktop 或既有 session 直接進 hub, 否則顯示 portal ── */
+  (function boot(){
+    const params = new URLSearchParams(location.search);
+    const refDesktop = params.get('ref') === 'desktop';
+    const hasSession = !!sessionStorage.getItem('cqe_gate_ok');
+    if (refDesktop){
+      history.replaceState(null, '', location.pathname);
+      sessionStorage.setItem('cqe_gate_ok', '1');
+    }
+    if (refDesktop || hasSession){
+      enterHub();
+    } else {
+      showScreen('portalScreen');
+    }
+  })();
+})();
+</script>
+</body>
+</html>
