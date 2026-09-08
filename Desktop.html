@@ -589,7 +589,7 @@ input.cqe-dt-input{background:var(--core-2);color:var(--text);border:1px solid v
     <!-- ✅ 改成：標題 + 搜尋 + 兩顆按鈕都在同一列 -->
     <div class="row" id="stuToolbar" style="align-items:center; gap:8px; flex-wrap:wrap">
       <h3 style="margin:0">學員名單</h3>
-      <input id="stuQuery" placeholder="搜尋 Team / Name / ID" style="flex:1; min-width:260px">
+      <input id="stuQuery" placeholder="搜尋 Function / Team / Name / ID" style="flex:1; min-width:260px">
       <button id="btnStuReload" class="ghost">重新整理</button>
       <button id="btnExportStudents" class="ghost">Export</button>
       <input id="fileOverwriteCsv" type="file" accept=".csv" style="display:none">
@@ -2828,7 +2828,7 @@ async function loadStudentsAdmin(reset=false){
 
   // 組搜尋與分頁參數
   const like   = (s)=> `*${encodeURIComponent(s)}*`;
-  const orExpr = q ? `&or=(team.ilike.${like(q)},name.ilike.${like(q)},employee_no.ilike.${like(q)})` : '';
+  const orExpr = q ? `&or=(function.ilike.${like(q)},team.ilike.${like(q)},name.ilike.${like(q)},employee_no.ilike.${like(q)})` : '';
   const from   = ((__stu_page - 1) * STU_PAGE_SIZE);
 
   try{
