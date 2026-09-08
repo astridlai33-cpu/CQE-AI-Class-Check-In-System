@@ -354,10 +354,20 @@ input.error{border-color:var(--danger);animation:shake .35s var(--ease) 0s 2}
 .cqe-modal-msg{color:var(--text);font-size:14px;line-height:1.6;white-space:pre-wrap}
 .cqe-modal-form{max-height:60vh;overflow-y:auto;padding-right:4px}
 /* 課程的上課學員單位 Function：可複選 chips（2026-09-08 Astrid 定案，取代原本的自由輸入） */
-.cqe-ms{display:flex;flex-wrap:wrap;gap:6px;margin-top:2px}
+/* 單位選項排成一列, 超出寬度以水平捲動處理 (2026-09-08 Astrid 定案), scrollbar 深色化 */
+.cqe-ms{
+  display:flex;flex-wrap:nowrap;gap:6px;margin-top:2px;
+  overflow-x:auto;overflow-y:hidden;padding-bottom:6px;
+  scrollbar-width:thin;scrollbar-color:var(--line-hi) transparent;
+}
+.cqe-ms::-webkit-scrollbar{height:6px}
+.cqe-ms::-webkit-scrollbar-track{background:transparent}
+.cqe-ms::-webkit-scrollbar-thumb{background:var(--line-hi);border-radius:999px}
+.cqe-ms::-webkit-scrollbar-thumb:hover{background:var(--muted)}
 .cqe-ms-chip{
   appearance:none;background:var(--glass);border:1px solid var(--line);color:var(--muted);
   padding:5px 13px;border-radius:999px;cursor:pointer;font-family:var(--font);font-size:12px;font-weight:600;
+  flex:0 0 auto;white-space:nowrap;
   transition:border-color .2s var(--ease), color .2s var(--ease), background .2s var(--ease);
 }
 .cqe-ms-chip:hover{border-color:var(--line-hi);color:var(--text)}
@@ -1190,8 +1200,12 @@ input.cqe-dt-input{background:var(--core-2);color:var(--text);border:1px solid v
       const set = new Set();
       m.forEach(s=>{ const fn = (s.fn||'').trim(); if (fn) set.add(fn); });
       __fnOptionsCache = Array.from(set).sort((a,b)=> a.toUpperCase().localeCompare(b.toUpperCase()));
-    }catch{ __fnOptionsCache = []; }
-    return __fnOptionsCache;
+      return __fnOptionsCache;
+    }catch(e){
+      // 讀取失敗不寫入快取，否則一次失敗後 chips 會永遠空白
+      console.error('讀取學員 Function 清單失敗：', e);
+      return [];
+    }
   }
   // 用 function 宣告（hoisted）：月曆渲染比這裡早執行，const 會踩到 TDZ
   function parseCsvVals(v){ return String(v||'').split(',').map(s=> s.trim()).filter(Boolean); }
