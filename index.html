@@ -353,6 +353,17 @@ input.error{border-color:var(--danger);animation:shake .35s var(--ease) 0s 2}
 .cqe-modal-title{margin:0 0 12px;font-size:16px;color:var(--text)}
 .cqe-modal-msg{color:var(--text);font-size:14px;line-height:1.6;white-space:pre-wrap}
 .cqe-modal-form{max-height:60vh;overflow-y:auto;padding-right:4px}
+/* 課程的上課學員單位 Function：可複選 chips（2026-09-08 Astrid 定案，取代原本的自由輸入） */
+.cqe-ms{display:flex;flex-wrap:wrap;gap:6px;margin-top:2px}
+.cqe-ms-chip{
+  appearance:none;background:var(--glass);border:1px solid var(--line);color:var(--muted);
+  padding:5px 13px;border-radius:999px;cursor:pointer;font-family:var(--font);font-size:12px;font-weight:600;
+  transition:border-color .2s var(--ease), color .2s var(--ease), background .2s var(--ease);
+}
+.cqe-ms-chip:hover{border-color:var(--line-hi);color:var(--text)}
+.cqe-ms-chip.on{background:rgba(91,184,255,.1);border-color:var(--accent);color:var(--accent)}
+.cqe-ms-chip:focus-visible{outline:none;border-color:rgba(91,184,255,.5);box-shadow:0 0 0 4px rgba(91,184,255,.09)}
+.cqe-ms-empty{font-size:12px;color:var(--dim)}
 .cqe-modal-form label{display:block;font-size:13px;color:var(--muted);margin:10px 0 6px}
 .cqe-modal-form input,.cqe-modal-form textarea{
   width:100%;padding:10px 12px;border-radius:12px;border:1px solid var(--line);
@@ -874,7 +885,7 @@ input.cqe-dt-input{background:var(--core-2);color:var(--text);border:1px solid v
       // 桌機固定四行: 課名/單位/時間/地點; 手機格子放不下第四行, 靠 CSS 隱藏地點列 (取捨見回報)
       list.slice(0,3).forEach(course=>{
         const chip = document.createElement('div');
-        const col = hashColor(course.dept || course.title || '');
+        const col = hashColor(firstDeptVal(course.dept) || course.title || '');
         chip.className = 'cal-chip';
         chip.style.borderColor = hexToRgba(col, .5);
         chip.style.color = col;
@@ -897,7 +908,7 @@ input.cqe-dt-input{background:var(--core-2);color:var(--text);border:1px solid v
 
         const deptEl = document.createElement('div');
         deptEl.className = 'cal-chip-dept';
-        deptEl.textContent = course.dept || '—';
+        deptEl.textContent = fmtDeptText(course.dept) || '—';
         chip.appendChild(deptEl);
 
         const timeEl = document.createElement('div');
@@ -961,7 +972,7 @@ input.cqe-dt-input{background:var(--core-2);color:var(--text);border:1px solid v
         const metaParts = [];
         if (t) metaParts.push(escapeHtml(t));
         if (course.room) metaParts.push(escapeHtml(course.room));
-        if (course.dept) metaParts.push(escapeHtml(course.dept));
+        if (course.dept) metaParts.push(escapeHtml(fmtDeptText(course.dept)));
         const card = document.createElement('div');
         card.className = 'course-card' + (list.length === 1 ? ' course-card--fill' : '');
         card.innerHTML =
@@ -1168,6 +1179,52 @@ input.cqe-dt-input{background:var(--core-2);color:var(--text);border:1px solid v
     });
   }
 
+  // ===== 上課學員單位 Function 多選（2026-09-08 Astrid 定案）=====
+  // 選項取自學員名單既有的 Function（沿用 loadStudentsCache 的匿名查詢）。
+  // 多選值以逗號分隔寫回 courses.dept 這個既有欄位（未改 schema）。
+  let __fnOptionsCache = null;
+  async function fetchFunctionOptions(){
+    if (__fnOptionsCache) return __fnOptionsCache;
+    try{
+      const m = await loadStudentsCache();
+      const set = new Set();
+      m.forEach(s=>{ const fn = (s.fn||'').trim(); if (fn) set.add(fn); });
+      __fnOptionsCache = Array.from(set).sort((a,b)=> a.toUpperCase().localeCompare(b.toUpperCase()));
+    }catch{ __fnOptionsCache = []; }
+    return __fnOptionsCache;
+  }
+  // 用 function 宣告（hoisted）：月曆渲染比這裡早執行，const 會踩到 TDZ
+  function parseCsvVals(v){ return String(v||'').split(',').map(s=> s.trim()).filter(Boolean); }
+  /** 多個 Function 的顯示字串，例如 "CQE Agent · RD" */
+  function fmtDeptText(v){ return parseCsvVals(v).join(' · '); }
+  /** 取第一個 Function 決定課程顏色，讓同單位的課維持同色 */
+  function firstDeptVal(v){ return parseCsvVals(v)[0] || ''; }
+
+  /** 在 container 畫出可複選 chips，選取結果即時同步到 hidden input（逗號分隔） */
+  function renderFunctionChips(container, hidden, options, selected){
+    const sel  = new Set(selected);
+    // 課程原本的值若不在學員 Function 清單裡也要列出，否則一編輯就被清掉
+    const opts = Array.from(new Set([...options, ...selected]));
+    if (!opts.length){
+      container.innerHTML = '<span class="cqe-ms-empty">學員名單尚無 Function 可選</span>';
+      hidden.value = '';
+      return;
+    }
+    const sync = ()=> hidden.value = opts.filter(o=> sel.has(o)).join(',');
+    container.innerHTML = opts.map(o=>
+      '<button type="button" class="cqe-ms-chip' + (sel.has(o)?' on':'') + '" data-val="' + escapeHtml(o) + '">' + escapeHtml(o) + '</button>'
+    ).join('');
+    sync();
+    container.querySelectorAll('.cqe-ms-chip').forEach(btn=>{
+      btn.addEventListener('click', ()=>{
+        const v = btn.dataset.val;
+        if (sel.has(v)) sel.delete(v); else sel.add(v);
+        btn.classList.toggle('on', sel.has(v));
+        sync();
+      });
+    });
+  }
+
   function showFormModal({ title, fields }){
     return new Promise(resolve=>{
       const overlay = document.createElement('div');
@@ -1177,6 +1234,11 @@ input.cqe-dt-input{background:var(--core-2);color:var(--text);border:1px solid v
         const val = escapeHtml(f.value ?? '');
         const labelHtml = '<label>' + escapeHtml(f.label) + '</label>';
         if (type === 'textarea') return labelHtml + '<textarea data-key="' + escapeHtml(f.key) + '" rows="3">' + val + '</textarea>';
+        if (type === 'multiselect'){
+          // chips 在 modal 掛上後才畫；hidden input 帶 data-key，送出邏輯照舊
+          return labelHtml + '<div class="cqe-ms" data-ms-for="' + escapeHtml(f.key) + '"></div>'
+               + '<input type="hidden" data-key="' + escapeHtml(f.key) + '" value="' + val + '">';
+        }
         return labelHtml + '<input data-key="' + escapeHtml(f.key) + '" type="' + type + '" value="' + val + '">';
       }).join('');
       overlay.innerHTML =
@@ -1194,6 +1256,14 @@ input.cqe-dt-input{background:var(--core-2);color:var(--text);border:1px solid v
       inputs.forEach(el=>{
         if (el.type === 'date') attachDatePicker(el);
         else if (el.type === 'time') attachTimePicker(el);
+      });
+      // multiselect 欄位：選項非同步撈回後才畫 chips
+      fields.filter(f=> f.type === 'multiselect').forEach(async f=>{
+        const box = overlay.querySelector('.cqe-ms[data-ms-for="' + f.key + '"]');
+        const hid = overlay.querySelector('input[type="hidden"][data-key="' + f.key + '"]');
+        if (!box || !hid) return;
+        const opts = f.options || await fetchFunctionOptions();
+        renderFunctionChips(box, hid, opts, parseCsvVals(hid.value));
       });
       let settled = false;
       function close(result){
@@ -1470,7 +1540,7 @@ input.cqe-dt-input{background:var(--core-2);color:var(--text);border:1px solid v
         { key:'start_time', label:'開始時間（可空）', value:(c.start_time||'').slice(0,5), type:'time' },
         { key:'end_time', label:'結束時間（可空）', value:(c.end_time||'').slice(0,5), type:'time' },
         { key:'room', label:'上課地點（可空）', value:c.room || '' },
-        { key:'dept', label:'單位（可空）', value:c.dept || '' },
+        { key:'dept', label:'上課學員單位 Function（可空，可複選）', type:'multiselect', value:c.dept || '' },
         { key:'description', label:'說明（可空）', value:c.description || '', type:'textarea' }
       ]});
       if (fv === null) return;
@@ -1507,7 +1577,7 @@ input.cqe-dt-input{background:var(--core-2);color:var(--text);border:1px solid v
         { key:'start_time', label:'開始時間（可空）', value:'', type:'time' },
         { key:'end_time', label:'結束時間（可空）', value:'', type:'time' },
         { key:'room', label:'上課地點（可空）', value:'' },
-        { key:'dept', label:'單位（可空）', value:'' },
+        { key:'dept', label:'上課學員單位 Function（可空，可複選）', type:'multiselect', value:'' },
         { key:'description', label:'說明（可空）', value:'', type:'textarea' }
       ]});
       if (fv === null) return;

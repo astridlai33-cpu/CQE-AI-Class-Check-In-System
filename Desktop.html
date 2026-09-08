@@ -92,6 +92,17 @@
     .cqe-modal-title{margin:0 0 12px;font-size:16px;color:var(--text)}
     .cqe-modal-msg{color:var(--text);font-size:14px;line-height:1.6;white-space:pre-wrap}
     .cqe-modal-form{max-height:60vh;overflow-y:auto;padding-right:4px}
+    /* 課程的上課學員單位 Function：可複選 chips（2026-09-08 Astrid 定案，取代原本的自由輸入） */
+    .cqe-ms{display:flex;flex-wrap:wrap;gap:6px;margin-top:2px}
+    .cqe-ms-chip{
+      appearance:none;background:var(--glass);border:1px solid var(--line);color:var(--muted);
+      padding:5px 13px;border-radius:999px;cursor:pointer;font-family:var(--font);font-size:12px;font-weight:600;
+      transition:border-color .2s var(--ease), color .2s var(--ease), background .2s var(--ease);
+    }
+    .cqe-ms-chip:hover{border-color:var(--line-hi);color:var(--text)}
+    .cqe-ms-chip.on{background:rgba(91,184,255,.1);border-color:var(--accent);color:var(--accent)}
+    .cqe-ms-chip:focus-visible{outline:none;border-color:rgba(91,184,255,.5);box-shadow:0 0 0 4px rgba(91,184,255,.09)}
+    .cqe-ms-empty{font-size:12px;color:var(--dim)}
     .cqe-modal-actions{margin-top:18px;display:flex;justify-content:flex-end;gap:10px}
     .cqe-modal-ok,.cqe-modal-cancel,.cqe-modal-danger{
       appearance:none;padding:8px 20px;border-radius:999px;cursor:pointer;font-weight:600;
@@ -550,8 +561,9 @@ input.cqe-dt-input{background:var(--core-2);color:var(--text);border:1px solid v
           </div>
           <label>上課地點（選填）</label>
           <input id="inpRoom" placeholder="例如：訓練室 A"/>
-          <label>上課學員單位 Dept（選填）</label>
-          <input id="inpDept" placeholder="例如：RD / 製造部 / 品保"/>
+          <label>上課學員單位 Function（選填，可複選）</label>
+          <div class="cqe-ms" id="inpDeptChips"></div>
+          <input id="inpDept" type="hidden" value=""/>
           <label>說明（選填）</label>
           <textarea id="inpDesc" rows="2" placeholder="課程簡介…"></textarea>
           <div class="row">
@@ -805,6 +817,56 @@ input.cqe-dt-input{background:var(--core-2);color:var(--text);border:1px solid v
 
   // ===== 深色風表單視窗 (取代連續 prompt，用法: await showFormModal({title, fields}) → object|null) =====
   // fields: [{key, label, value, placeholder, type}] type 預設 'text'，支援 'textarea'
+  // ===== 上課學員單位 Function 多選（2026-09-08 Astrid 定案）=====
+  // 選項取自學員名單既有的 Function，與學員端用語一致。
+  // 多選值以逗號分隔寫回 courses.dept 這個既有欄位（未改 schema）。
+  let __fnOptionsCache = null;
+  async function fetchFunctionOptions(){
+    if (__fnOptionsCache) return __fnOptionsCache;
+    try{
+      const rows = await rest('/rest/v1/students?select=function&limit=20000', { auth:true });
+      const set = new Set((rows||[]).map(r=> (r.function||'').trim()).filter(Boolean));
+      __fnOptionsCache = Array.from(set).sort((a,b)=> a.toUpperCase().localeCompare(b.toUpperCase()));
+    }catch{ __fnOptionsCache = []; }
+    return __fnOptionsCache;
+  }
+  function parseCsvVals(v){ return String(v||'').split(',').map(s=> s.trim()).filter(Boolean); }
+  /** 多個 Function 的顯示字串，例如 "CQE Agent · RD" */
+  function fmtDeptText(v){ return parseCsvVals(v).join(' · '); }
+
+  /** 在 container 畫出可複選 chips，選取結果即時同步到 hidden input（逗號分隔） */
+  function renderFunctionChips(container, hidden, options, selected){
+    const sel  = new Set(selected);
+    // 課程原本的值若不在學員 Function 清單裡也要列出，否則一編輯就被清掉
+    const opts = Array.from(new Set([...options, ...selected]));
+    if (!opts.length){
+      container.innerHTML = '<span class="cqe-ms-empty">學員名單尚無 Function 可選</span>';
+      hidden.value = '';
+      return;
+    }
+    const sync = ()=> hidden.value = opts.filter(o=> sel.has(o)).join(',');
+    container.innerHTML = opts.map(o=>
+      `<button type="button" class="cqe-ms-chip${sel.has(o)?' on':''}" data-val="${escapeHtml(o)}">${escapeHtml(o)}</button>`
+    ).join('');
+    sync();
+    container.querySelectorAll('.cqe-ms-chip').forEach(btn=>{
+      btn.addEventListener('click', ()=>{
+        const v = btn.dataset.val;
+        if (sel.has(v)) sel.delete(v); else sel.add(v);
+        btn.classList.toggle('on', sel.has(v));
+        sync();
+      });
+    });
+  }
+
+  /** 建立課程表單上的 Function chips（進入【課程】分頁時呼叫） */
+  async function initCourseDeptChips(){
+    const box = document.getElementById('inpDeptChips');
+    const hid = document.getElementById('inpDept');
+    if (!box || !hid) return;
+    renderFunctionChips(box, hid, await fetchFunctionOptions(), parseCsvVals(hid.value));
+  }
+
   function showFormModal({ title, fields }){
     return new Promise(resolve=>{
       const overlay = document.createElement('div');
@@ -816,6 +878,11 @@ input.cqe-dt-input{background:var(--core-2);color:var(--text);border:1px solid v
         const labelHtml = `<label style="white-space:pre-wrap">${escapeHtml(f.label)}</label>`;
         if (type === 'textarea'){
           return `${labelHtml}<textarea data-key="${escapeHtml(f.key)}" rows="3"${ph}>${val}</textarea>`;
+        }
+        if (type === 'multiselect'){
+          // chips 在 modal 掛上後才畫；hidden input 帶 data-key，送出邏輯照舊
+          return `${labelHtml}<div class="cqe-ms" data-ms-for="${escapeHtml(f.key)}"></div>`
+               + `<input type="hidden" data-key="${escapeHtml(f.key)}" value="${val}">`;
         }
         return `${labelHtml}<input data-key="${escapeHtml(f.key)}" type="${type}" value="${val}"${ph}>`;
       }).join('');
@@ -834,6 +901,14 @@ input.cqe-dt-input{background:var(--core-2);color:var(--text);border:1px solid v
       inputs.forEach(el=>{
         if (el.type === 'date') attachDatePicker(el);
         else if (el.type === 'time') attachTimePicker(el);
+      });
+      // multiselect 欄位：選項非同步撈回後才畫 chips
+      fields.filter(f=> f.type === 'multiselect').forEach(async f=>{
+        const box = overlay.querySelector(`.cqe-ms[data-ms-for="${f.key}"]`);
+        const hid = overlay.querySelector(`input[type="hidden"][data-key="${f.key}"]`);
+        if (!box || !hid) return;
+        const opts = f.options || await fetchFunctionOptions();
+        renderFunctionChips(box, hid, opts, parseCsvVals(hid.value));
       });
       let settled = false;
       function close(result){
@@ -1202,7 +1277,7 @@ function showAdminTab(name){
     el.classList.toggle('hide', k!==name);
   });
 
-  if (name==='courses' && state.access_token){ try{ loadCourses(); }catch{} }
+  if (name==='courses' && state.access_token){ try{ loadCourses(); }catch{} try{ initCourseDeptChips(); }catch{} }
   if (name==='csv' && state.access_token){ /* noop */ }
 
   // 切到學員名單：先初始化表頭排序，再載入第一頁
@@ -1996,7 +2071,7 @@ btnCheckin?.addEventListener('click', async ()=>{
         const item = document.createElement('div');
         item.className='item'; item.dataset.id=c.id;
         item.innerHTML = `
-          <div><b>${escapeHtml(c.title||'')}</b>｜<span class="muted">${c.date||''}${t}${c.room ? ' ｜ 📍'+escapeHtml(c.room) : ''}${c.dept ? ' ｜ 🏢'+escapeHtml(c.dept) : ''}</span></div>
+          <div><b>${escapeHtml(c.title||'')}</b>｜<span class="muted">${c.date||''}${t}${c.room ? ' ｜ 📍'+escapeHtml(c.room) : ''}${c.dept ? ' ｜ 🏢'+escapeHtml(fmtDeptText(c.dept)) : ''}</span></div>
           <div class="row">
             <button class="ghost btn-edit" title="編輯">編輯</button>
             <button class="ghost btn-delete" title="刪除">刪除</button>
@@ -2014,7 +2089,7 @@ btnCheckin?.addEventListener('click', async ()=>{
     try{
       await rest('/rest/v1/courses?select=*', { method:'POST', auth:true, body: JSON.stringify({ title, date, start_time, end_time, description, room, dept }) });
       courseMsg.textContent='課程建立成功'; courseMsg.className='note ok';
-      $('#inpTitle').value=''; $('#inpDate').value=''; $('#inpStart').value=''; $('#inpEnd').value=''; $('#inpDesc').value=''; if($('#inpRoom')) $('#inpRoom').value=''; if($('#inpDept')) $('#inpDept').value='';
+      $('#inpTitle').value=''; $('#inpDate').value=''; $('#inpStart').value=''; $('#inpEnd').value=''; $('#inpDesc').value=''; if($('#inpRoom')) $('#inpRoom').value=''; if($('#inpDept')) $('#inpDept').value=''; try{ initCourseDeptChips(); }catch{}
       loadCourses(); loadToday(); loadStackedChart();
     }catch(e){ courseMsg.textContent='建立課程失敗：' + e.message; courseMsg.className='note error'; }
   });
@@ -2037,7 +2112,7 @@ btnCheckin?.addEventListener('click', async ()=>{
         { key:'end_time', label:'結束時間（可空）', value:(c.end_time||'').slice(0,5), type:'time' },
         { key:'description', label:'說明（可空）', value:c.description || '', type:'textarea' },
         { key:'room', label:'上課地點（可空）', value:c.room || '' },
-        { key:'dept', label:'上課學員單位 Dept（可空）', value:c.dept || '' }
+        { key:'dept', label:'上課學員單位 Function（可空，可複選）', type:'multiselect', value:c.dept || '' }
       ]});
       if (fv === null) return;
       const { title, date, start_time, end_time, description, room, dept } = fv;
