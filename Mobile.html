@@ -374,8 +374,9 @@ let isTodayCourse = true;
 let COURSE_BY_ID = new Map();
 let __selectedFnMobile = null; // null = 全部
 
-/* ✅ 統計函式（已報到 / 未報到 / 參與率）＋縮放動畫 */
-let __prevStatsMobile = { checked:null, unchecked:null, rate:null }; // 👈 新增：記錄上次數值
+/* ✅ 統計函式（已報到 / 未報到）＋縮放動畫 */
+/* 2026-09-08 Astrid 定案: 學員端只看人數, 不顯示參與率 */
+let __prevStatsMobile = { checked:null, unchecked:null }; // 👈 新增：記錄上次數值
 
 function updateStats(){
   // 依目前選取的 Function Tab 過濾後再計算統計
@@ -385,20 +386,18 @@ function updateStats(){
   const total   = filteredStudents.length;
   const checked = filteredStudents.filter(s => CHECKED.has(String(s.id))).length;
   const unchecked = Math.max(0, total - checked);
-  const rate = total > 0 ? Math.round(checked * 100 / total) : 0;
 
   const tip = document.getElementById('tipCourse');
   if (!tip) return;
 
   if (isTodayCourse){
     tip.classList.remove('warn','error');
-    tip.textContent = `已報到: ${checked} 人, 未報到: ${unchecked} 人, 參與率: ${rate}%`;
+    tip.textContent = `已報到: ${checked} 人, 未報到: ${unchecked} 人`;
 
     // 👇 關鍵：有變化就觸發縮放動畫
     const changed =
       __prevStatsMobile.checked   !== checked ||
-      __prevStatsMobile.unchecked !== unchecked ||
-      __prevStatsMobile.rate      !== rate;
+      __prevStatsMobile.unchecked !== unchecked;
 
     if (changed){
       tip.classList.remove('bump'); // 先移除
@@ -406,7 +405,7 @@ function updateStats(){
       tip.classList.add('bump');    // 再加回去就會播放
     }
 
-    __prevStatsMobile = { checked, unchecked, rate };
+    __prevStatsMobile = { checked, unchecked };
   }else{
     tip.classList.remove('error');
     tip.classList.add('warn');
