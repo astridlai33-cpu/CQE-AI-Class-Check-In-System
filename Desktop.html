@@ -426,7 +426,7 @@ input.cqe-dt-input{background:var(--core-2);color:var(--text);border:1px solid v
   </div>
 
 <div class="toolbar row" style="margin-top:8px; align-items:center">
-  <input id="studentSearch" placeholder="搜尋學員（Team / Name / ID）"
+  <input id="studentSearch" placeholder="搜尋學員(Function/Dept/Name/ID)"
          style="flex:1; min-width:260px"/>
   <button id="btnReloadStudents" class="icon-btn" title="重新整理">
       <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24">
@@ -450,7 +450,7 @@ input.cqe-dt-input{background:var(--core-2);color:var(--text);border:1px solid v
 
     <div class="card" data-reveal>
   <h3>自助報到</h3>
-  <input id="inpEmp" placeholder="Team / Name / ID" autocomplete="off"/>
+  <input id="inpEmp" placeholder="Dept / Name / ID" autocomplete="off"/>
   <div class="row">
     <button id="btnCheckin">Add</button>
     <button id="btnClearEmp" class="ghost">清除</button>
@@ -462,8 +462,8 @@ input.cqe-dt-input{background:var(--core-2);color:var(--text);border:1px solid v
     <h3>不在名單？自助建立學員</h3>
     <div class="row">
       <div style="flex:1">
-        <label>Team</label>
-        <input id="inpTeam" placeholder="Team (組站)"/>
+        <label>Dept</label>
+        <input id="inpTeam" placeholder="Dept (組站)"/>
       </div>
       <div style="flex:1">
         <label>Function</label>
@@ -589,7 +589,7 @@ input.cqe-dt-input{background:var(--core-2);color:var(--text);border:1px solid v
     <!-- ✅ 改成：標題 + 搜尋 + 兩顆按鈕都在同一列 -->
     <div class="row" id="stuToolbar" style="align-items:center; gap:8px; flex-wrap:wrap">
       <h3 style="margin:0">學員名單</h3>
-      <input id="stuQuery" placeholder="搜尋 Function / Team / Name / ID" style="flex:1; min-width:260px">
+      <input id="stuQuery" placeholder="搜尋學員(Function/Dept/Name/ID)" style="flex:1; min-width:260px">
       <button id="btnStuReload" class="ghost">重新整理</button>
       <button id="btnExportStudents" class="ghost">Export</button>
       <input id="fileOverwriteCsv" type="file" accept=".csv" style="display:none">
@@ -605,7 +605,7 @@ input.cqe-dt-input{background:var(--core-2);color:var(--text);border:1px solid v
  <thead>
   <tr>
     <th data-sort="function"     style="cursor:pointer;text-align:left;padding:8px 10px;color:var(--muted);font-size:12px">Function<span class="sort-icon" style="margin-left:6px;opacity:.7"></span></th>
-    <th data-sort="team"         style="cursor:pointer;text-align:left;padding:8px 10px;color:var(--muted);font-size:12px">Team<span class="sort-icon" style="margin-left:6px;opacity:.7"></span></th>
+    <th data-sort="team"         style="cursor:pointer;text-align:left;padding:8px 10px;color:var(--muted);font-size:12px">Dept<span class="sort-icon" style="margin-left:6px;opacity:.7"></span></th>
     <th data-sort="name"         style="cursor:pointer;text-align:left;padding:8px 10px;color:var(--muted);font-size:12px">Name (EN)<span class="sort-icon" style="margin-left:6px;opacity:.7"></span></th>
     <th data-sort="employee_no"  style="cursor:pointer;text-align:left;padding:8px 10px;color:var(--muted);font-size:12px">ID<span class="sort-icon" style="margin-left:6px;opacity:.7"></span></th>
     <th                          style="text-align:center;padding:8px 10px;color:var(--muted);font-size:12px">操作</th>
@@ -652,13 +652,13 @@ input.cqe-dt-input{background:var(--core-2);color:var(--text);border:1px solid v
             <button id="btnLoadBackfill" class="ghost">載入學員</button>
           </div>
           <div class="row" style="margin-top:8px">
-            <input id="inpBulkIDs" placeholder="搜尋 Team / Name / ID" style="flex:1;min-width:300px">
+            <input id="inpBulkIDs" placeholder="搜尋 Dept / Name / ID" style="flex:1;min-width:300px">
             <button id="btnBulkAdd" class="ghost">查詢</button>
           </div>
           <div id="backfillMsg" class="note" style="margin-top:8px"></div>
           <div style="margin-top:8px;max-height:360px;overflow:auto">
             <table id="backfillTable">
-              <thead><tr><th>Team</th><th>Name (EN)</th><th>ID</th><th>狀態/選取</th></tr></thead>
+              <thead><tr><th>Dept</th><th>Name (EN)</th><th>ID</th><th>狀態/選取</th></tr></thead>
               <tbody id="backfillTbody"></tbody>
             </table>
           </div>
@@ -1856,7 +1856,7 @@ btnCheckin?.addEventListener('click', async ()=>{
   const course_id = selCourseToday?.value;
   const kw = (inpEmp?.value || '').trim();
   if (!course_id){ checkinMsg.textContent='請先選擇課程。'; checkinMsg.className='note warn'; return; }
-  if (!kw){ checkinMsg.textContent='請輸入關鍵字（Team / Name / ID）。'; checkinMsg.className='note warn'; return; }
+  if (!kw){ checkinMsg.textContent='請輸入關鍵字（Dept / Name / ID）。'; checkinMsg.className='note warn'; return; }
   if (__isSubmitting) return;
   __isSubmitting = true;
 
@@ -1914,7 +1914,7 @@ btnCheckin?.addEventListener('click', async ()=>{
     selfCreateBox?.classList.remove('hide');
     if (inpEmp2) inpEmp2.value = kw;   // 預填使用者剛輸入的 ID/關鍵字
     if (checkinMsg){
-      checkinMsg.textContent='找不到此關鍵字的學員，請填 Team / 姓名 / ID 後按「建立並報到」。';
+      checkinMsg.textContent='找不到此關鍵字的學員，請填 Dept / 姓名 / ID 後按「建立並報到」。';
       checkinMsg.className='note warn';
     }
   }catch(e){
@@ -1931,7 +1931,7 @@ btnCheckin?.addEventListener('click', async ()=>{
   const course_id = selCourseToday?.value;
 
   if (!__allowCheckin){ showAlert('這堂課不是今天，僅供預覽名單，無法報到'); return; }
-  if (!team || !name || !emp){ showAlert('Team/姓名/工號不可為空'); return; }
+  if (!team || !name || !emp){ showAlert('Dept/姓名/工號不可為空'); return; }
   if (__isSubmitting) return;
   __isSubmitting = true;
 
@@ -2951,7 +2951,7 @@ document.getElementById('fileOverwriteCsv')?.addEventListener('change', async fu
 async function createStudentAdmin(){
   if (!state.access_token) { showAlert('請先登入'); return; }
   const fv = await showFormModal({ title:'新增學員', fields:[
-    { key:'team', label:'Team（組站）' },
+    { key:'team', label:'Dept（組站）' },
     { key:'fn', label:'Function（職能，可空）' },
     { key:'name', label:'Name（英文）' },
     { key:'employee_no', label:'ID（工號）' }
@@ -2984,7 +2984,7 @@ async function createStudentAdmin(){
 async function editStudentAdmin(s){
   if (!state.access_token) { showAlert('請先登入'); return; }
   const fv = await showFormModal({ title:'編輯學員', fields:[
-    { key:'team', label:'Team（組站）', value:s.team || '' },
+    { key:'team', label:'Dept（組站）', value:s.team || '' },
     { key:'fn', label:'Function（職能，可空）', value:s.function || '' },
     { key:'name', label:'Name（英文）', value:s.name || '' },
     { key:'employee_no', label:'ID（工號）', value:s.employee_no || '' }

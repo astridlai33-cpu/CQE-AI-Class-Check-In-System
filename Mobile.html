@@ -208,7 +208,7 @@
       <div class="panel-inner">
         <h3>快速搜尋 / 點名</h3>
         <div id="fnBar" class="scroll-hide"></div>
-        <input id="q" placeholder="搜尋學員（Team / Name / ID）" autocomplete="off" inputmode="search" style="margin-top:10px">
+        <input id="q" placeholder="搜尋學員(Function/Dept/Name/ID)" autocomplete="off" inputmode="search" style="margin-top:10px">
         <div id="list"></div>
         <div id="emptyMsg" class="note"></div>
       </div>
@@ -260,8 +260,8 @@
       <input id="newEmp" type="text" placeholder="例如：A123456" autocomplete="off">
       <label>Function（職能，可空）</label>
       <input id="newFunction" type="text" placeholder="Function" autocomplete="off">
-      <label>Team（必填）</label>
-      <input id="newTeam" type="text" placeholder="Team(組站)" autocomplete="off">
+      <label>Dept（必填）</label>
+      <input id="newTeam" type="text" placeholder="Dept(組站)" autocomplete="off">
       <label>姓名</label>
       <input id="newName" type="text" placeholder="英文" autocomplete="off">
       <div class="row" style="margin-top:14px;justify-content:flex-end">
@@ -800,7 +800,7 @@ async function onSaveNewStudent(){
   const name  = (newName.value||'').trim();
   const team  = (newTeam.value||'').trim();
   const fn    = (newFunction.value||'').trim() || null;
-  if (!empNo || !name || !team){ toast('Team / 姓名 / 工號皆為必填','error'); return; }
+  if (!empNo || !name || !team){ toast('Dept / 姓名 / 工號皆為必填','error'); return; }
   if (__isSubmitting) return;
   __isSubmitting = true;
 
