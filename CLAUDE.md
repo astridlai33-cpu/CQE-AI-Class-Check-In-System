@@ -83,6 +83,7 @@ python scripts/check_project.py "/Users/AstridLai/Desktop/CQE-AI-Class-Check-In-
 - 原「進行中 (subagent)」三項已於 2026-09-07 完成並確認在檔內: 自訂深色日期/時間選擇器 (`attachDatePicker`/`attachTimePicker`, Desktop.html + index.html 皆有, Mobile.html 無 date/time input 故不需要), 月曆當月堂數 (`#monthCount`), 圖表累計堂數 (Desktop `#chartCourseKpi` / index `#calChartKpi`).
 - 2026-09-07 追加: Desktop.html 圖表頁的匯出按鈕改為 xlsx 三表匯出 (`exportAttendanceXlsx`), 取代原本的 `attendance_list.csv`. 已備份 `Desktop.html.bak-20260907-145256`.
 - 2026-09-08: xlsx 匯出實作抽成共用模組 `src/xlsx-export.js` (`window.CQE.xlsxExport.exportAttendanceXlsx()`), Desktop.html 移除內嵌實作改為呼叫; index.html 月曆圖表面板新增匯出鈕 `#btnCalXlsx` (只在 localStorage 有 `sb_access_token` 時顯示, 每次開面板重判). 兩邊按鈕文字統一為「Excel」. 備份 `Desktop.html.bak2-20260907-175752`.
+- 2026-09-08: 圖表 KPI「累計 N 堂課」改為只計**實際上過的課** — 日期不晚於今天 **且**已有人報到; 未來排定的課、以及沒人報到的課 (沒開成) 都不計入. Astrid 定案: 過去但 0 報到的課也不算, 過去與當天同一套標準. 兩處同步 (Desktop `#chartCourseKpi` / index `#calChartKpi`), 人次 KPI 與圖表本身的資料範圍未動. 備份 `Desktop.html.bak3-20260908-143757` / `index.html.bak-20260908-143757`.
 - **部署 repo 已確認 (2026-09-07)**: `astridlai33-cpu/CQE-AI-Class-Check-In-System` (main 分支 → GitHub Pages). 本資料夾仍無 .git; 推送方式是 clone 到暫存區、複製改動檔後 commit/push. 本資料夾的檔案本身已是 CRLF, 與 repo 一致, 直接 `cp` 即可 (比對差異時用 `diff --strip-trailing-cr`, 否則所有檔案都會被標成 differ).
 - 待 Astrid: ①確認 2026-08-05 CQE Agent P2 start_time 是否已改回 14:00 ②首次真實使用「取消報到」時挑一筆測試再批次用 ③在正式站按一次「Excel」匯出鈕 (Desktop 後台圖表頁 + index 月曆圖表面板兩處) 確認 anon 讀取真的通 (本機網路擋 Supabase, 無法實連驗證).
 - 下一步: G4 硬化 (lifecycle DoD 逐條: 三 viewport 全頁截圖/空資料超長字串中英混排/console error 清查) → G5 部署.

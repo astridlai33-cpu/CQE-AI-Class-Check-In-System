@@ -2257,8 +2257,16 @@ const chartAreaBgPlugin = {
       const grandTotal = totals.reduce((a,b)=> a+b, 0);
       const kpiEl = document.getElementById('chartKpi');
       if (kpiEl) kpiEl.textContent = grandTotal;
+      // 累計堂數只計實際上過的課: 日期不晚於今天, 且已有人報到.
+      // 未來排定的課、以及沒人報到的課 (沒開成) 都不計入 (2026-09-08 Astrid 定案)
+      const todayKey = todayStr();
+      const attendedIds = new Set((attends||[]).map(r=> r.course_id));
+      const heldCount = courses.filter(c=>{
+        const d = String(c.date||'');
+        return d && d <= todayKey && attendedIds.has(c.id);
+      }).length;
       const courseKpiEl = document.getElementById('chartCourseKpi');
-      if (courseKpiEl) courseKpiEl.textContent = courses.length;
+      if (courseKpiEl) courseKpiEl.textContent = heldCount;
 
       function renderChartLegend(){
         const box = document.getElementById('chartLegend');
