@@ -74,12 +74,15 @@ python scripts/check_project.py "/Users/AstridLai/Desktop/CQE-AI-Class-Check-In-
 - 2026-07-11 | 瀏覽器快取舊版 config.js/index.html 造成「改了沒生效」誤判多次 | 共用 js 引用一律帶 ?v=日期 版本參數, 改檔後 bump; 驗證時 URL 帶 _r 隨機參數
 - 2026-09-07 | Desktop.html 的「匯出上課人員」CSV 按鈕換成 xlsx 三表匯出 (上課名單/課程統計/學員統計). 原版用 JWT 讀資料, token 過期就匯不出; 新版一律 anon 讀 (RLS 已開放), 不受過期影響 | xlsx 是自組 OOXML+zip (CompressionStream deflate-raw, 不支援時退回 stored), 無外部依賴不走 CDN — 公司 proxy 擋 CDN 時仍可用; 產出檔名沿用 `_yyyymmddhhmmss_(Security C).xlsx` 慣例
 - 2026-09-07 | Edit 工具改不動含 BOM (原始碼寫成反斜線 uFEFF) 逃逸序列的那一行 (實際字元與逃逸字串兩種形式都比對不到) | 這類行改用 node 腳本做行區間 splice, 不要跟 Edit 硬耗; splice 前先 `cp` 備份
+- 2026-09-08 | 接手中斷的 session 時, 靠檔案 mtime + 與部署 repo 比對就能精確定位斷點: 程式碼三個檔都改完且語法無誤, 真正沒做的是收尾 (CLAUDE.md 交接沒更新 + 沒推送) | 盤點順序: `find -newermt` 排時間 → `diff --strip-trailing-cr` 比 repo → `git ls-remote` 看遠端 HEAD → 抽 HTML 內嵌 script 過 `new vm.Script()` 驗語法, 不要憑「看起來像改一半」就重寫
 - 2026-07-11 | 月曆報到名單原本卡管理員登入, 根因是 attendance 表 RLS 只允許 anon 讀當日 (attendance_read_today_anon) | 經 Astrid 明示同意後加 migration attendance_read_all_anon (anon 可 SELECT 全部出席記錄), 前端改一律匿名讀+課程列右側顯示 n 人 (accent 色); Supabase 政策變更紀錄在此, 屬黃級改動已取得同意
 
 ## 待辦與交接 (session 結束前更新)
 
 - 目前狀態 (2026-07-11): G3 功能批次持續中. 已交付並驗收: Desktop/Mobile UI 重做, index.html 入口 (原版 portal/hub 還原+VS Code 打字背景), TimeTree 月曆 (五欄制/磨砂面板/年月選擇器/拖曳換月/管理員編輯+新增課程+取消報到/報到名單 function+部門碼+ID 分權顯示/Search/排序/圖表含 Daily-Month), 後台圖表 function 分類+Daily-Month+取消報到批次, Mobile 報到誤點確認視窗, 部門 tab 滑動.
-- 進行中 (subagent): 自訂深色日期/時間選擇器 (取代原生彈窗, Desktop 建立課程+兩邊 modal), 月曆當月堂數顯示, 圖表累計堂數.
-- 2026-09-07 追加: Desktop.html 圖表頁的匯出按鈕改為「匯出 Excel 名單」(`exportAttendanceXlsx`), 產出三張表的 .xlsx, 取代原本的 `attendance_list.csv`. 已備份 `Desktop.html.bak-20260907-145256`.
-- 待 Astrid: ①確認 2026-08-05 CQE Agent P2 start_time 是否已改回 14:00 ②部署 repo 位置 (資料夾無 .git) ③首次真實使用「取消報到」時挑一筆測試再批次用 ④在瀏覽器按一次「匯出 Excel 名單」確認 anon 讀取真的通 (本機網路被公司 proxy 擋, 無法實連 Supabase 驗證).
-- 下一步: 選擇器批次驗收後進 G4 硬化 (lifecycle DoD 逐條: 三 viewport 全頁截圖/空資料超長字串中英混排/console error 清查) → G5 部署.
+- 原「進行中 (subagent)」三項已於 2026-09-07 完成並確認在檔內: 自訂深色日期/時間選擇器 (`attachDatePicker`/`attachTimePicker`, Desktop.html + index.html 皆有, Mobile.html 無 date/time input 故不需要), 月曆當月堂數 (`#monthCount`), 圖表累計堂數 (Desktop `#chartCourseKpi` / index `#calChartKpi`).
+- 2026-09-07 追加: Desktop.html 圖表頁的匯出按鈕改為 xlsx 三表匯出 (`exportAttendanceXlsx`), 取代原本的 `attendance_list.csv`. 已備份 `Desktop.html.bak-20260907-145256`.
+- 2026-09-08: xlsx 匯出實作抽成共用模組 `src/xlsx-export.js` (`window.CQE.xlsxExport.exportAttendanceXlsx()`), Desktop.html 移除內嵌實作改為呼叫; index.html 月曆圖表面板新增匯出鈕 `#btnCalXlsx` (只在 localStorage 有 `sb_access_token` 時顯示, 每次開面板重判). 兩邊按鈕文字統一為「Excel」. 備份 `Desktop.html.bak2-20260907-175752`.
+- **部署 repo 已確認 (2026-09-07)**: `astridlai33-cpu/CQE-AI-Class-Check-In-System` (main 分支 → GitHub Pages). 本資料夾仍無 .git; 推送方式是 clone 到暫存區、複製改動檔後 commit/push. 本資料夾的檔案本身已是 CRLF, 與 repo 一致, 直接 `cp` 即可 (比對差異時用 `diff --strip-trailing-cr`, 否則所有檔案都會被標成 differ).
+- 待 Astrid: ①確認 2026-08-05 CQE Agent P2 start_time 是否已改回 14:00 ②首次真實使用「取消報到」時挑一筆測試再批次用 ③在正式站按一次「Excel」匯出鈕 (Desktop 後台圖表頁 + index 月曆圖表面板兩處) 確認 anon 讀取真的通 (本機網路擋 Supabase, 無法實連驗證).
+- 下一步: G4 硬化 (lifecycle DoD 逐條: 三 viewport 全頁截圖/空資料超長字串中英混排/console error 清查) → G5 部署.

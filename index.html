@@ -403,6 +403,14 @@ input.error{border-color:var(--danger);animation:shake .35s var(--ease) 0s 2}
 }
 .chart-mode-btn:hover{border-color:var(--line-hi);color:var(--text)}
 .chart-mode-btn.active{background:rgba(91,184,255,.1);border-color:var(--accent);color:var(--accent)}
+/* 匯出 xlsx (只給管理員); 另立 class, 避免被 .chart-mode-btn 的分頁切換迴圈掃到 */
+.chart-export-btn{
+  appearance:none;background:var(--glass);border:1px solid var(--line);color:var(--muted);
+  padding:6px 14px;border-radius:999px;cursor:pointer;font-family:var(--font);font-size:12px;font-weight:600;
+  transition:border-color .2s var(--ease), color .2s var(--ease);
+}
+.chart-export-btn:hover:not(:disabled){border-color:var(--accent);color:var(--accent)}
+.chart-export-btn:disabled{opacity:.5;cursor:default}
 .chart-legend{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px;justify-content:center}
 .chart-legend-chip{
   display:inline-flex;align-items:center;gap:6px;padding:4px 12px;border-radius:999px;
@@ -587,6 +595,7 @@ input.cqe-dt-input{background:var(--core-2);color:var(--text);border:1px solid v
         <button type="button" class="chart-mode-btn active" data-mode="daily">Daily</button>
         <button type="button" class="chart-mode-btn" data-mode="month">Month</button>
       </div>
+      <button class="chart-export-btn" id="btnCalXlsx" type="button" style="display:none">Excel</button>
       <button class="icon-btn" id="btnChartClose" type="button" aria-label="關閉">✕</button>
     </div>
     <canvas id="calChart" height="120"></canvas>
@@ -598,6 +607,7 @@ input.cqe-dt-input{background:var(--core-2);color:var(--text);border:1px solid v
 <script src="src/config.js?v=20260710"></script>
 <script src="src/utils.js?v=20260710"></script>
 <script src="src/api.js?v=20260710"></script>
+<script src="src/xlsx-export.js?v=20260907"></script>
 <script>
 (function(){
   'use strict';
@@ -1774,7 +1784,24 @@ input.cqe-dt-input{background:var(--core-2);color:var(--text);border:1px solid v
       }
     }
 
-    $('#btnCalChart').addEventListener('click', ()=>{ overlay.classList.add('show'); renderChart(); });
+    // 匯出鈕只給管理員 (有後台 JWT); 每次開面板重判一次, 期間登入/登出都跟得上
+    $('#btnCalChart').addEventListener('click', ()=>{
+      $('#btnCalXlsx').style.display = localStorage.getItem('sb_access_token') ? '' : 'none';
+      overlay.classList.add('show');
+      renderChart();
+    });
+    $('#btnCalXlsx').addEventListener('click', async ()=>{
+      const btn = $('#btnCalXlsx');
+      btn.disabled = true; btn.textContent = '匯出中…';
+      try{
+        const r = await window.CQE.xlsxExport.exportAttendanceXlsx();
+        if (!r) await showAlert('沒有可匯出的出席資料');
+      }catch(e){
+        await showAlert('匯出失敗：' + (e?.message || e));
+      }finally{
+        btn.disabled = false; btn.textContent = 'Excel';
+      }
+    });
     $('#btnChartClose').addEventListener('click', ()=> overlay.classList.remove('show'));
     overlay.addEventListener('click', (e)=>{ if (e.target === overlay) overlay.classList.remove('show'); });
     document.addEventListener('keydown', (e)=>{ if (e.key==='Escape' && overlay.classList.contains('show')) overlay.classList.remove('show'); });
