@@ -1317,10 +1317,8 @@ async function loadToday(){
 setupRealtimeAttendance(selCourseToday?.value || null);
           const total = __studentsCache.length;
           const checked = __checkedSet.size;
-          const unchecked = Math.max(0, total - checked);
-          const rate = total > 0 ? Math.round((checked/total)*100) : 0;
 
-          todayInfo.textContent = `已報到: ${checked} 人, 未報到: ${unchecked} 人, 參與率: ${rate}%`;
+          todayInfo.textContent = `已報到: ${checked} 人, 學員總人數: ${total} 人`;
 todayInfo.className = 'note';
 refreshCheckinMsg(); // ← 新增
 
@@ -1475,7 +1473,8 @@ function setCheckinEnabled(enabled){
 // 👉 讓輸入框按 Enter 也能觸發「立即報到」
 // === 即時更新今日統計（僅今天課程才顯示統計）===
 // 追蹤上一次的統計，用來判斷是否播放動畫
-let __prevStats = { checked: null, unchecked: null, rate: null };
+/* 2026-09-08 Astrid 定案: 統計只顯示已報到與學員總人數, 不顯示未報到與參與率 (兩端一致) */
+let __prevStats = { checked: null, total: null };
 
 function updateTodayStats(){
   const isToday = selCourseToday?.selectedOptions?.[0]?.dataset?.date === todayStr();
@@ -1487,18 +1486,15 @@ function updateTodayStats(){
     : __studentsCache;
   const total   = filteredStudents.length || 0;
   const checked = filteredStudents.filter(s => __checkedSet.has(String(s.id))).length;
-  const unchecked = Math.max(0, total - checked);
-  const rate      = total > 0 ? Math.round((checked / total) * 100) : 0;
 
   // 更新文字
-  todayInfo.textContent = `已報到: ${checked} 人, 未報到: ${unchecked} 人, 參與率: ${rate}%`;
+  todayInfo.textContent = `已報到: ${checked} 人, 學員總人數: ${total} 人`;
   todayInfo.className = 'note'; // 保持基礎樣式（今天才是白字）
 
   // 若統計有變化，觸發動畫（移除→強制回流→加回 class）
   const changed = (
-    __prevStats.checked   !== checked ||
-    __prevStats.unchecked !== unchecked ||
-    __prevStats.rate      !== rate
+    __prevStats.checked !== checked ||
+    __prevStats.total   !== total
   );
   if (changed) {
     todayInfo.classList.remove('bump');
@@ -1507,7 +1503,7 @@ function updateTodayStats(){
   }
 
   // 記錄這次數值
-  __prevStats = { checked, unchecked, rate };
+  __prevStats = { checked, total };
 
   refreshCheckinMsg(); // 你原本的行為：同步自助報到狀態
 }
