@@ -1879,6 +1879,8 @@ input.cqe-dt-input{background:var(--core-2);color:var(--text);border:1px solid v
     // 匯出鈕只給管理員 (有後台 JWT); 每次開面板重判一次, 期間登入/登出都跟得上
     $('#btnCalChart').addEventListener('click', ()=>{
       $('#btnCalXlsx').style.display = localStorage.getItem('sb_access_token') ? '' : 'none';
+      // 每次開面板丟掉快取重抓, 後台改過學員資料/報到後圖表才會跟上
+      studentsCachePromise = null; allAttPromise = null;
       overlay.classList.add('show');
       renderChart();
     });
