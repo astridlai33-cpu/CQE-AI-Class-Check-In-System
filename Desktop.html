@@ -543,6 +543,7 @@ input.cqe-dt-input{background:var(--core-2);color:var(--text);border:1px solid v
             <button id="btnDoSignIn">登入</button>
             <button id="btnSignOut" class="ghost hide">登出</button>
           </div>
+          <div id="loginReturnNote" class="note hide" style="margin-top:8px">登入已過期，登入後會自動回到課程表</div>
           <div id="loginError" class="error hide" style="margin-top:8px"></div>
           <div id="boxSigned" class="hide success" style="margin-top:8px">已登入，可進行課程與統計管理。</div>
         </div>
@@ -1313,6 +1314,7 @@ function showAdminTab(name){
   // ===== Auth（僅在管理後台內操作）=====
   const inpEmail=$('#inpEmail'), inpPwd=$('#inpPwd'), btnDoSignIn=$('#btnDoSignIn'), btnTogglePwd=$('#btnTogglePwd'), btnSignOut=$('#btnSignOut');
   const loginError=$('#loginError'), boxSigned=$('#boxSigned');
+  const returnTo = new URLSearchParams(location.search).get('return'); // 'calendar' = 從課程表登入過期導來
 
   async function signIn(email, password){
     const data = await rest('/auth/v1/token?grant_type=password', {
@@ -1357,6 +1359,8 @@ function showAdminTab(name){
     btnDoSignIn.disabled=true; const prev=btnDoSignIn.textContent; btnDoSignIn.textContent='登入中…';
     try{
       await signIn(inpEmail.value.trim(), inpPwd.value);
+      // 從課程表因登入過期被導來的 → 登入後直接回課程表 (index.html 會還原月份/日期抽屜)
+      if (returnTo === 'calendar'){ location.replace('index.html?ref=desktop&view=calendar'); return; }
       refreshAuthUI();
       showAdminTab('courses');
     }catch(e){
@@ -3285,6 +3289,11 @@ async function deleteStudentAdmin(s){
   function initAdminPickers(){ ['inpDate','inpStart','inpEnd'].forEach(id=>{ const el=document.getElementById(id); if(!el) return; }); }
   refreshAuthUI();
   ensureAdminDefaultTab();
+  if (returnTo === 'calendar'){
+    document.querySelector('.tab-btn[data-tab="admin"]')?.click(); // 直接打開管理後台 → 登入
+    $('#loginReturnNote')?.classList.remove('hide');
+    inpEmail?.focus();
+  }
   setupBroadcastReceiver();   // ← 新增：開始接收他裝置的報到廣播
   loadToday();
   initAdminPickers();
