@@ -627,14 +627,14 @@ input.cqe-dt-input{background:var(--core-2);color:var(--text);border:1px solid v
 
 <script src="src/config.js?v=20260710"></script>
 <script src="src/utils.js?v=20260710"></script>
-<script src="src/api.js?v=20260710"></script>
+<script src="src/api.js?v=20261125"></script>
 <script src="src/xlsx-export.js?v=20260907"></script>
 <script>
 (function(){
   'use strict';
   const $ = (q)=>document.querySelector(q);
   const { escapeHtml, fmt, todayStr } = window.CQE.utils;
-  const { rest } = window.CQE.api;
+  const { rest, restAll } = window.CQE.api;
   const PAL = window.CQE.config.PAL;
 
   const GATE_CODE = 'QACQE';
@@ -815,7 +815,8 @@ input.cqe-dt-input{background:var(--core-2);color:var(--text);border:1px solid v
     if (courseAttCount) return courseAttCount;
     courseAttCount = new Map();
     try{
-      const rows = await rest('/rest/v1/attendance?select=course_id', { auth:false }) || [];
+      // 報到記錄已破 1000 筆, 單次 rest() 會被截斷, 分頁全撈
+      const rows = await restAll('/rest/v1/attendance?select=course_id&order=id.asc', { auth:false });
       rows.forEach(r=>{
         const k = String(r.course_id);
         courseAttCount.set(k, (courseAttCount.get(k) || 0) + 1);
@@ -1724,7 +1725,8 @@ input.cqe-dt-input{background:var(--core-2);color:var(--text);border:1px solid v
     }
     function loadAllAttendance(){
       if (!allAttPromise){
-        allAttPromise = rest('/rest/v1/attendance?select=course_id,student_id', { auth:false })
+        // 報到記錄已破 1000 筆, 單次 rest() 會被截斷 (最新的報到被丟掉), 分頁全撈
+        allAttPromise = restAll('/rest/v1/attendance?select=course_id,student_id&order=id.asc', { auth:false })
           .catch(e=>{ allAttPromise = null; throw e; });
       }
       return allAttPromise;

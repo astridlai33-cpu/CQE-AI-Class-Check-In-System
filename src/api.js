@@ -116,5 +116,21 @@
     return { rows: Array.isArray(data) ? data : [], total };
   }
 
-  window.CQE.api = { rest, restWithCount };
+  /**
+   * 分頁全撈: PostgREST 單次最多回 1000 筆, 超過會被靜默截斷.
+   * path 須自帶唯一欄位排序 (如 order=id.asc), 否則分頁之間可能重複/漏筆.
+   */
+  async function restAll(path, opts={}, pageSize=1000) {
+    const out = [];
+    const sep = path.includes('?') ? '&' : '?';
+    for (let offset = 0; ; offset += pageSize) {
+      const rows = await rest(`${path}${sep}limit=${pageSize}&offset=${offset}`, opts);
+      if (!Array.isArray(rows) || !rows.length) break;
+      out.push(...rows);
+      if (rows.length < pageSize) break;
+    }
+    return out;
+  }
+
+  window.CQE.api = { rest, restWithCount, restAll };
 })();

@@ -705,7 +705,7 @@ input.cqe-dt-input{background:var(--core-2);color:var(--text);border:1px solid v
 <!-- Phase 2: 共用模組 -->
 <script src="src/config.js?v=20260711"></script>
 <script src="src/utils.js?v=20260711"></script>
-<script src="src/api.js?v=20260711"></script>
+<script src="src/api.js?v=20261125"></script>
 <script src="src/xlsx-export.js?v=20260907"></script>
 <script src="src/broadcast.js?v=20260711"></script>
 <script src="src/checkin.js?v=20260711"></script>
@@ -715,7 +715,7 @@ input.cqe-dt-input{background:var(--core-2);color:var(--text);border:1px solid v
   const { SUPABASE_URL, SUPABASE_ANON_KEY, CHART_PALETTE } = window.CQE.config;
   const sb = window.CQE.sb;
   const { escapeHtml, getInitials, fmt, todayStr } = window.CQE.utils;
-  const { rest, restWithCount } = window.CQE.api;
+  const { rest, restWithCount, restAll } = window.CQE.api;
   const { ensureBroadcast, emitCheckin } = window.CQE.broadcast;
   const { doCheckin } = window.CQE.checkin;
 
@@ -2266,7 +2266,8 @@ const chartAreaBgPlugin = {
       const courses = await rest('/rest/v1/courses?select=id,title,date&order=date.asc', { auth:true });
       if (!Array.isArray(courses) || !courses.length){ clearChart(); setMsg('目前沒有課程可顯示'); const k = document.getElementById('chartKpi'); if (k) k.textContent = '0'; const ck = document.getElementById('chartCourseKpi'); if (ck) ck.textContent = '0'; document.getElementById('chartLegend').innerHTML=''; return; }
 
-      const attends = await rest('/rest/v1/attendance?select=course_id,student_id', { auth:true });
+      // 報到記錄已破 1000 筆, 單次 rest() 會被 PostgREST 截斷 (最新的報到被丟掉), 一律分頁全撈
+      const attends = await restAll('/rest/v1/attendance?select=course_id,student_id&order=id.asc', { auth:true });
       // 2026-07-11 Astrid 定案: 堆疊分類從 team 改為 function
       const stuRows = await rest('/rest/v1/students?select=id,function&limit=20000', { auth:true });
       const id2team = new Map((stuRows||[]).map(s => [s.id, s.function || '未分類']));
