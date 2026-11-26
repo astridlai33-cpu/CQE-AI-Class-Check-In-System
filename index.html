@@ -403,6 +403,8 @@ input.error{border-color:var(--danger);animation:shake .35s var(--ease) 0s 2}
 }
 .cqe-modal-danger:hover{background:rgba(248,113,113,.16)}
 .cqe-modal-danger:focus-visible{outline:none;border-color:rgba(248,113,113,.6);box-shadow:0 0 0 4px rgba(248,113,113,.09)}
+/* 編輯課程的「刪除課程」靠左, 與 取消/確定 分開避免誤按 */
+.cqe-modal-actions .cqe-modal-del{margin-right:auto}
 /* ── 上課人次圖表面板 ── */
 .chart-overlay{
   position:fixed;inset:0;background:rgba(5,5,5,.6);backdrop-filter:blur(8px);z-index:100;
@@ -1233,6 +1235,8 @@ input.cqe-dt-input{background:var(--core-2);color:var(--text);border:1px solid v
   }
   // 用 function 宣告（hoisted）：月曆渲染比這裡早執行，const 會踩到 TDZ
   function parseCsvVals(v){ return String(v||'').split(',').map(s=> s.trim()).filter(Boolean); }
+  /** 千分位數字, 例如 1021 → "1,021" (固定 en-US, 不隨瀏覽器語系變成 1.021) */
+  function fmtNum(n){ return Number(n || 0).toLocaleString('en-US'); }
   /** 多個 Function 的顯示字串，例如 "CQE Agent · RD" */
   function fmtDeptText(v){ return parseCsvVals(v).join(' · '); }
   /** 取第一個 Function 決定課程顏色，讓同單位的課維持同色 */
@@ -1263,7 +1267,8 @@ input.cqe-dt-input{background:var(--core-2);color:var(--text);border:1px solid v
     });
   }
 
-  function showFormModal({ title, fields }){
+  /** 有 deleteLabel 時左下角多一顆刪除鈕, 按下回傳 'delete' (其餘: 確定回傳欄位值, 取消回傳 null) */
+  function showFormModal({ title, fields, deleteLabel }){
     return new Promise(resolve=>{
       const overlay = document.createElement('div');
       overlay.className = 'cqe-modal-overlay';
@@ -1284,6 +1289,7 @@ input.cqe-dt-input{background:var(--core-2);color:var(--text);border:1px solid v
           (title ? '<h3 class="cqe-modal-title">' + escapeHtml(title) + '</h3>' : '') +
           '<div class="cqe-modal-form">' + fieldsHtml + '</div>' +
           '<div class="cqe-modal-actions">' +
+            (deleteLabel ? '<button type="button" class="cqe-modal-danger cqe-modal-del">' + escapeHtml(deleteLabel) + '</button>' : '') +
             '<button type="button" class="cqe-modal-cancel">取消</button>' +
             '<button type="button" class="cqe-modal-ok">確定</button>' +
           '</div>' +
@@ -1324,6 +1330,7 @@ input.cqe-dt-input{background:var(--core-2);color:var(--text);border:1px solid v
       overlay.addEventListener('click', e=>{ if (e.target === overlay) close(null); });
       overlay.querySelector('.cqe-modal-cancel').addEventListener('click', ()=> close(null));
       overlay.querySelector('.cqe-modal-ok').addEventListener('click', submit);
+      if (deleteLabel) overlay.querySelector('.cqe-modal-del').addEventListener('click', ()=> close('delete'));
       if (inputs[0]) inputs[0].focus();
     });
   }
@@ -1602,8 +1609,9 @@ input.cqe-dt-input{background:var(--core-2);color:var(--text);border:1px solid v
         { key:'room', label:'上課地點（可空）', value:c.room || '' },
         { key:'dept', label:'上課學員單位 Function（可空，可複選）', type:'multiselect', value:c.dept || '' },
         { key:'description', label:'說明（可空）', value:c.description || '', type:'textarea' }
-      ]});
+      ], deleteLabel:'刪除課程' });
       if (fv === null) return;
+      if (fv === 'delete') return deleteCourse(c);
       const { title, date, start_time, end_time, room, dept, description } = fv;
       const body = {
         title, date,
@@ -1623,6 +1631,32 @@ input.cqe-dt-input{background:var(--core-2);color:var(--text);border:1px solid v
       // rest() 判定 JWT 失效時會清掉 token; 其餘錯誤 (含權限不足) 照實顯示
       if (!localStorage.getItem('sb_access_token')) await goAdminLogin();
       else await showAlert('更新失敗：' + (e.message || e));
+    }
+  }
+
+  /* ── 管理員刪除課程 (從編輯視窗進入). attendance 的 FK 是 ON DELETE CASCADE, 刪課會連報到記錄一起刪, 確認視窗寫明筆數 ── */
+  async function deleteCourse(c){
+    if (adminTokenExpired()) return goAdminLogin();
+    try{
+      attendanceCache.delete(String(c.id)); // 重抓, 確認視窗的報到筆數要是最新的
+      const n = (await loadAttendanceIds(c.id)).length;
+      const msg = '確定刪除課程「' + (c.title || '') + '」（' + (c.date || '') + '）？' +
+        (n ? '\n這堂課已有 ' + fmtNum(n) + ' 筆報到記錄，會一併刪除。' : '') +
+        '\n刪除後無法復原。';
+      if (!(await showConfirm(msg))) return;
+      if (adminTokenExpired()) return goAdminLogin();
+      const rows = await rest('/rest/v1/courses?id=eq.' + encodeURIComponent(c.id),
+        { method:'DELETE', auth:true, headers:{ 'Prefer':'return=representation' } });
+      // RLS 擋下時 PostgREST 不報錯而是刪 0 筆, 要看回傳筆數才知道有沒有真的刪掉
+      if (!Array.isArray(rows) || !rows.length){ await showAlert('刪除失敗：找不到這堂課，或沒有刪除權限'); return; }
+      attendanceCache.delete(String(c.id));
+      coursesByDate = null;
+      await loadCourses();
+      renderMonth();
+      if (currentDrawerDate) openDetail(currentDrawerDate);
+    }catch(e){
+      if (!localStorage.getItem('sb_access_token')) await goAdminLogin();
+      else await showAlert('刪除失敗：' + (e.message || e));
     }
   }
 
@@ -1788,7 +1822,7 @@ input.cqe-dt-input{background:var(--core-2);color:var(--text);border:1px solid v
           meta.data.forEach((pt, i)=>{
             const v = ds.data[i]; if (!v) return;
             const p = pt.getProps(['x','y'], true);
-            ctx.fillText(String(v), p.x, p.y - 8);
+            ctx.fillText(fmtNum(v), p.x, p.y - 8);
           });
           ctx.restore();
         });
@@ -1848,7 +1882,7 @@ input.cqe-dt-input{background:var(--core-2);color:var(--text);border:1px solid v
           const d = String(c.date||'');
           return d && d <= todayKey && attendedIds.has(String(c.id));
         }).length;
-        $('#calChartKpi').textContent = '累計 ' + heldCount + ' 堂課 · ' + totals.reduce((a,b)=>a+b,0) + ' 人次';
+        $('#calChartKpi').textContent = '累計 ' + fmtNum(heldCount) + ' 堂課 · ' + fmtNum(totals.reduce((a,b)=>a+b,0)) + ' 人次';
         // Total 不畫線不畫點 (Astrid 定案), 只留柱頂數字標籤與 tooltip 的 Total 項
         datasets.push({
           type:'line', label:'Total', data: totals,
@@ -1864,6 +1898,7 @@ input.cqe-dt-input{background:var(--core-2);color:var(--text);border:1px solid v
           data:{ labels, datasets },
           options:{
             responsive:true,
+            locale:'en-US', // Y 軸刻度與 tooltip 數字固定用千分位逗號
             animation:{ duration:600, easing:'easeOutQuart' },
             interaction:{ mode:'index', intersect:false },
             scales:{

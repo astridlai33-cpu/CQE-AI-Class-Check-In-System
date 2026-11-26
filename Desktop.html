@@ -2189,6 +2189,9 @@ btnCheckin?.addEventListener('click', async ()=>{
 
   function clearChart(){ if (chart){ chart.destroy(); chart=null; } }
 
+/** 千分位數字, 例如 1021 → "1,021" (固定 en-US, 不隨瀏覽器語系變成 1.021) */
+function fmtNum(n){ return Number(n || 0).toLocaleString('en-US'); }
+
 /* ── 圖表 plugin：Total 數值標籤 (白線已依 2026-07-11 定案移除, 僅留柱頂數字) ── */
 const badgeLabelPlugin = {
   id: 'badgeLabelPlugin',
@@ -2211,7 +2214,7 @@ const badgeLabelPlugin = {
         const val = ds.data[i];
         if (!val) return;
         const { x, y } = pt.getProps(['x','y'], true);
-        ctx.fillText(String(val), x, y - 8);
+        ctx.fillText(fmtNum(val), x, y - 8);
       });
       ctx.restore();
     });
@@ -2360,7 +2363,7 @@ const chartAreaBgPlugin = {
       const totals = labels.map(lab => sortedTeams.reduce((s,t)=> s + (counts[t]?.[lab]||0), 0));
       const grandTotal = totals.reduce((a,b)=> a+b, 0);
       const kpiEl = document.getElementById('chartKpi');
-      if (kpiEl) kpiEl.textContent = grandTotal;
+      if (kpiEl) kpiEl.textContent = fmtNum(grandTotal);
       // 累計堂數只計實際上過的課: 日期不晚於今天, 且已有人報到.
       // 未來排定的課、以及沒人報到的課 (沒開成) 都不計入 (2026-09-08 Astrid 定案)
       const todayKey = todayStr();
@@ -2370,7 +2373,7 @@ const chartAreaBgPlugin = {
         return d && d <= todayKey && attendedIds.has(c.id);
       }).length;
       const courseKpiEl = document.getElementById('chartCourseKpi');
-      if (courseKpiEl) courseKpiEl.textContent = heldCount;
+      if (courseKpiEl) courseKpiEl.textContent = fmtNum(heldCount);
 
       function renderChartLegend(){
         const box = document.getElementById('chartLegend');
@@ -2426,6 +2429,7 @@ const chartAreaBgPlugin = {
         data: { labels, datasets },
         options: {
           responsive: true,
+          locale: 'en-US', // Y 軸刻度數字固定用千分位逗號
           animation: { duration: 600, easing: 'easeOutQuart' },
           interaction: { mode: 'index', intersect: false },
           scales: {
@@ -2475,7 +2479,7 @@ const chartAreaBgPlugin = {
               itemSort: (a,b)=> (b.dataset.isTotal?1:0) - (a.dataset.isTotal?1:0),
               callbacks: {
                 title(items){ return items[0]?.label ?? ''; },
-                label(item){ return ' ' + item.dataset.label + ': ' + item.parsed.y; }
+                label(item){ return ' ' + item.dataset.label + ': ' + fmtNum(item.parsed.y); }
               }
             }
           }
