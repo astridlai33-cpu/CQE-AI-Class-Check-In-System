@@ -627,14 +627,14 @@ input.cqe-dt-input{background:var(--core-2);color:var(--text);border:1px solid v
 
 <script src="src/config.js?v=20260710"></script>
 <script src="src/utils.js?v=20260710"></script>
-<script src="src/api.js?v=20261125"></script>
-<script src="src/xlsx-export.js?v=20260907"></script>
+<script src="src/api.js?v=20261126"></script>
+<script src="src/xlsx-export.js?v=20261125b"></script>
 <script>
 (function(){
   'use strict';
   const $ = (q)=>document.querySelector(q);
   const { escapeHtml, fmt, todayStr } = window.CQE.utils;
-  const { rest, restAll } = window.CQE.api;
+  const { rest, restAll, restPreferAdmin, searchStudents } = window.CQE.api;
   const PAL = window.CQE.config.PAL;
 
   const GATE_CODE = 'QACQE';
@@ -1017,12 +1017,17 @@ input.cqe-dt-input{background:var(--core-2);color:var(--text);border:1px solid v
 
   /* ── 第 8 項: 報到學員名單 (唯讀, students 全表快取一次 + 各課 attendance 快取) ── */
   let studentsCachePromise = null; // Promise<Map<String(id), {name, team}>>
+  let studentsCacheAdmin = false;  // true = 快取含部門碼/工號 (管理員 JWT 讀到); false = 只有 id/name/function
   const attendanceCache = new Map(); // course_id(string) → Promise<string[] student_id>
 
   function loadStudentsCache(){
     if (!studentsCachePromise){
-      studentsCachePromise = rest('/rest/v1/students?select=id,name,team,employee_no,function&limit=20000', { auth:false })
-        .then(rows=>{
+      // 部門碼/工號只開放給管理員: 有 token 用 JWT 讀完整欄位, 否則 anon 只讀 id/name/function
+      studentsCachePromise = restPreferAdmin(
+          '/rest/v1/students?select=id,name,team,employee_no,function&limit=20000',
+          '/rest/v1/students?select=id,name,function&limit=20000')
+        .then(({ rows, admin })=>{
+          studentsCacheAdmin = admin;
           const m = new Map();
           (rows||[]).forEach(s=> m.set(String(s.id), { name:s.name||'', team:s.team||'', emp:s.employee_no||'', fn:s.function||'' }));
           return m;
@@ -1119,15 +1124,31 @@ input.cqe-dt-input{background:var(--core-2);color:var(--text);border:1px solid v
     }
     bindRemove();
 
-    searchEl.addEventListener('input', ()=>{
-      const terms = searchEl.value.trim().toLowerCase().split(/[\s,]+/).filter(Boolean);
+    // 匿名看不到部門碼/ID 但仍可被搜尋 (Astrid 定案): 匿名快取沒有這兩欄, 每個搜尋詞改由 DB 函式比對, 結果 (學員 id) 存在 srvHits
+    const srvHits = new Map(); // 搜尋詞 → Set<student id>
+    const getTerms = ()=> searchEl.value.trim().toLowerCase().split(/[\s,]+/).filter(Boolean);
+    function applySearch(){
+      const terms = getTerms();
       const filtered = !terms.length ? names : names.filter(n=>{
-        // 匿名看不到部門碼/ID 但仍可被搜尋 (Astrid 定案)
         const hay = ((n.fn||'') + ' ' + (n.team||'') + ' ' + (n.name||'') + ' ' + (n.emp||'')).toLowerCase();
-        return terms.every(t=> hay.includes(t));
+        return terms.every(t=> hay.includes(t) || (srvHits.has(t) && srvHits.get(t).has(String(n.id))));
       });
       listEl.innerHTML = rowsHtml(filtered);
       bindRemove();
+    }
+    let srvT = null;
+    searchEl.addEventListener('input', ()=>{
+      applySearch();
+      if (studentsCacheAdmin) return;
+      clearTimeout(srvT);
+      srvT = setTimeout(async ()=>{
+        const todo = getTerms().filter(t=> !srvHits.has(t));
+        if (!todo.length) return;
+        await Promise.all(todo.map(t=> searchStudents(t)
+          .then(rows=> srvHits.set(t, new Set(rows.map(r=> String(r.id)))))
+          .catch(()=>{ /* 查詢失敗就只比對 function/姓名 */ })));
+        applySearch();
+      }, 350);
     });
   }
 
@@ -1907,6 +1928,8 @@ input.cqe-dt-input{background:var(--core-2);color:var(--text);border:1px solid v
       renderChart();
     });
     $('#btnCalXlsx').addEventListener('click', async ()=>{
+      // 學員表 (含工號/部門碼) 需管理員 JWT, 過期就先導去重新登入
+      if (adminTokenExpired()) return goAdminLogin();
       const btn = $('#btnCalXlsx');
       btn.disabled = true; btn.textContent = '匯出中…';
       try{

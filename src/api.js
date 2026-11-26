@@ -132,5 +132,34 @@
     return out;
   }
 
-  window.CQE.api = { rest, restWithCount, restAll };
+  /**
+   * 學員工號/部門碼只開放給管理員 (anon 只能讀 students 的 id/name/function).
+   * 有管理員 token 時用 JWT 讀 adminPath; 沒 token 或 token 已失效則改用 anon 讀 anonPath.
+   * 回傳 { rows, admin } — admin=true 表示拿到的是完整欄位.
+   */
+  async function restPreferAdmin(adminPath, anonPath) {
+    if (localStorage.getItem('sb_access_token')) {
+      try { return { rows: await rest(adminPath, { auth: true }), admin: true }; }
+      catch (e) { if (e.status !== 401 && e.status !== 403) throw e; }
+    }
+    return { rows: await rest(anonPath), admin: false };
+  }
+
+  /** 以「完整工號」查單一學員 (DB 函式 find_student_by_emp, 不分大小寫), 只回傳 id/name/function; 查無回 null. */
+  async function findStudentByEmp(emp) {
+    const rows = await rest('/rest/v1/rpc/find_student_by_emp', {
+      method: 'POST', body: JSON.stringify({ p_emp: emp })
+    });
+    return (Array.isArray(rows) && rows[0]) || null;
+  }
+
+  /** 以「部分」工號 / 部門碼 / 姓名查學員 (DB 函式 search_students, 不分大小寫), 只回傳 id/name/function. */
+  async function searchStudents(kw) {
+    const rows = await rest('/rest/v1/rpc/search_students', {
+      method: 'POST', body: JSON.stringify({ p_kw: kw })
+    });
+    return Array.isArray(rows) ? rows : [];
+  }
+
+  window.CQE.api = { rest, restWithCount, restAll, restPreferAdmin, findStudentByEmp, searchStudents };
 })();

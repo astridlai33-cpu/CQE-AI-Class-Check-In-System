@@ -3,9 +3,9 @@
  * 上課名單 .xlsx 匯出（三張表：上課名單 / 課程統計 / 學員統計）
  * IIFE 格式，掛載至 window.CQE.xlsxExport
  *
- * 一律以 anon key 讀取（RLS 已開放 anon SELECT），不使用管理員 JWT，
- * 因此不受 token 過期影響。Desktop.html 後台圖表與 index.html 課程表
- * 圖表共用這一份。
+ * 課程與出席以 anon key 讀取；學員表需管理員 JWT（2026-11-25 起工號/部門碼
+ * 不再開放 anon 讀取），token 過期時匯出會失敗，呼叫端需先確認登入狀態。
+ * Desktop.html 後台圖表與 index.html 課程表圖表共用這一份。
  *
  * xlsx 為自組 OOXML + zip，無外部依賴，不走 CDN。
  *
@@ -20,10 +20,10 @@
   const { rest } = window.CQE.api;
 
   /** Supabase 分頁全撈，避免 PostgREST 單次回傳上限把資料截斷 */
-  async function fetchAllRows(path, pageSize=1000){
+  async function fetchAllRows(path, opts={}, pageSize=1000){
     const out = [];
     for (let offset=0; ; offset+=pageSize){
-      const rows = await rest(`${path}&limit=${pageSize}&offset=${offset}`);
+      const rows = await rest(`${path}&limit=${pageSize}&offset=${offset}`, opts);
       if (!Array.isArray(rows) || !rows.length) break;
       out.push(...rows);
       if (rows.length < pageSize) break;
@@ -129,7 +129,7 @@
     const [courses, attendance, students] = await Promise.all([
       fetchAllRows('/rest/v1/courses?select=id,title,date,dept,start_time,end_time,room&order=date.asc'),
       fetchAllRows('/rest/v1/attendance?select=course_id,student_id,checked_in_at&order=checked_in_at.asc'),
-      fetchAllRows('/rest/v1/students?select=id,team,function,name,employee_no&order=team.asc'),
+      fetchAllRows('/rest/v1/students?select=id,team,function,name,employee_no&order=team.asc', { auth:true }),
     ]);
     if (!attendance.length) return null;
 

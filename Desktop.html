@@ -705,8 +705,8 @@ input.cqe-dt-input{background:var(--core-2);color:var(--text);border:1px solid v
 <!-- Phase 2: 共用模組 -->
 <script src="src/config.js?v=20260711"></script>
 <script src="src/utils.js?v=20260711"></script>
-<script src="src/api.js?v=20261125"></script>
-<script src="src/xlsx-export.js?v=20260907"></script>
+<script src="src/api.js?v=20261126"></script>
+<script src="src/xlsx-export.js?v=20261125b"></script>
 <script src="src/broadcast.js?v=20260711"></script>
 <script src="src/checkin.js?v=20260711"></script>
 
@@ -715,7 +715,7 @@ input.cqe-dt-input{background:var(--core-2);color:var(--text);border:1px solid v
   const { SUPABASE_URL, SUPABASE_ANON_KEY, CHART_PALETTE } = window.CQE.config;
   const sb = window.CQE.sb;
   const { escapeHtml, getInitials, fmt, todayStr } = window.CQE.utils;
-  const { rest, restWithCount, restAll } = window.CQE.api;
+  const { rest, restWithCount, restAll, restPreferAdmin, findStudentByEmp, searchStudents } = window.CQE.api;
   const { ensureBroadcast, emitCheckin } = window.CQE.broadcast;
   const { doCheckin } = window.CQE.checkin;
 
@@ -782,17 +782,14 @@ input.cqe-dt-input{background:var(--core-2);color:var(--text);border:1px solid v
     });
   }
 
-  // ===== 報到前身分確認 (防誤點他人名字, 與 Mobile.html 同款): 顯示 Function/部門碼/ID/名字 =====
-  function confirmCheckinIdentity(s){
+  // ===== 報到前身分確認 (防誤點他人名字, 與 Mobile.html 同款): 顯示 Function/名字, 管理員登入時加顯部門碼/ID =====
+  function confirmCheckinIdentity(s, showPrivate){
     return new Promise(resolve=>{
       const overlay = document.createElement('div');
       overlay.className = 'cqe-modal-overlay';
-      const items = [
-        ['Function', s.function || '—'],
-        ['部門碼', s.team || '—'],
-        ['ID', s.employee_no || '—'],
-        ['名字', s.name || '—']
-      ];
+      const items = [['Function', s.function || '—']]
+        .concat(showPrivate ? [['部門碼', s.team || '—'], ['ID', s.employee_no || '—']] : [])
+        .concat([['名字', s.name || '—']]);
       overlay.innerHTML = `
         <div class="cqe-modal" role="alertdialog" aria-modal="true">
           <div class="cqe-modal-title" style="font-weight:700;color:var(--text);margin-bottom:4px">請確認是你本人</div>
@@ -1503,6 +1500,8 @@ const btnCreateStudent = $('#btnCreateStudent');
 const btnCancelCreate  = $('#btnCancelCreate');
 
 let __studentsCache   = [];
+let __adminView       = false; // true = 管理員登入, __studentsCache 含部門碼/工號; 否則只有 id/name/function
+let __srvHit          = null;  // 未登入者搜尋時, DB 函式依部分工號/部門碼/姓名查到的學員 { kw, ids:Set }
 let __checkedSet      = new Set();
 let __currentCourseId = null;
 let __isSubmitting    = false;
@@ -1686,7 +1685,10 @@ selCourseToday?.addEventListener('change', async ()=>{
   if (!courseId){ studentCards.innerHTML = ''; return; }
 
   try{
-    const students = await rest('/rest/v1/students?select=*&order=name.asc.nullslast&limit=1000');
+    const { rows: students, admin } = await restPreferAdmin(
+      '/rest/v1/students?select=*&order=name.asc.nullslast&limit=1000',
+      '/rest/v1/students?select=id,name,function&order=name.asc.nullslast&limit=1000');
+    __adminView = admin;
     __studentsCache = Array.isArray(students)? students : [];
   }catch(e){
     const el=document.createElement('div'); el.className='note error';
@@ -1763,7 +1765,8 @@ async function setupRealtimeAttendance(courseId){
       (s.team||'').toLowerCase().includes(q) ||
       (s.function||'').toLowerCase().includes(q) ||
       (s.name||'').toLowerCase().includes(q) ||
-      (s.employee_no||'').toLowerCase().includes(q)
+      (s.employee_no||'').toLowerCase().includes(q) ||
+      (__srvHit && __srvHit.kw === q && __srvHit.ids.has(String(s.id)))
     );
   }
 
@@ -1875,7 +1878,7 @@ function renderStudentCards(){
       if (__checkedSet.has(String(s.id))) return;  // 已報到：靜默忽略
       if (__isSubmitting) return;
       // 防誤點: 報到前確認身分 (與 Mobile.html 同款)
-      if (!(await confirmCheckinIdentity(s))) return;
+      if (!(await confirmCheckinIdentity(s, __adminView))) return;
       __isSubmitting = true;
       try{
         await doCheckin(__currentCourseId, s, { allowCheckin: __allowCheckin });
@@ -1927,8 +1930,20 @@ studentSearch?.addEventListener('input', ()=>{
   __searchDebounce = setTimeout(() => {
     __page = 1;
     renderStudentCards();
+    lookupSrvHit();
   }, 300);
 });
+
+// 未登入者讀不到工號/部門碼: 由 DB 函式以部分工號/部門碼/姓名比對, 查到的學員併入名單結果 (與 Mobile.html 同款)
+async function lookupSrvHit(){
+  const kw = (studentSearch?.value || '').trim().toLowerCase();
+  if (__adminView || !kw || (__srvHit && __srvHit.kw === kw)) return;
+  __srvHit = null;
+  try{
+    const rows = await searchStudents(kw);
+    if ((studentSearch?.value || '').trim().toLowerCase() === kw){ __srvHit = { kw, ids: new Set(rows.map(r=> String(r.id))) }; __page = 1; renderStudentCards(); }
+  }catch(_){ /* 查詢失敗就只顯示 Function/名字 的比對結果 */ }
+}
 
 // 清除輸入框
 btnClearEmp?.addEventListener('click', ()=>{
@@ -1949,7 +1964,7 @@ btnCheckin?.addEventListener('click', async ()=>{
   const course_id = selCourseToday?.value;
   const kw = (inpEmp?.value || '').trim();
   if (!course_id){ checkinMsg.textContent='請先選擇課程。'; checkinMsg.className='note warn'; return; }
-  if (!kw){ checkinMsg.textContent='請輸入關鍵字（Dept / Name / ID）。'; checkinMsg.className='note warn'; return; }
+  if (!kw){ checkinMsg.textContent = '請輸入關鍵字（Dept / Name / ID）。'; checkinMsg.className='note warn'; return; }
   if (__isSubmitting) return;
   __isSubmitting = true;
 
@@ -1959,7 +1974,13 @@ btnCheckin?.addEventListener('click', async ()=>{
     const like = (s)=> `*${encodeURIComponent(s)}*`;
     const orExpr = `or=(team.ilike.${like(kw)},name.ilike.${like(kw)},employee_no.ilike.${like(kw)})`;
     const url = `/rest/v1/students?select=*&${orExpr}&order=name.asc.nullslast&limit=50`;
-    const rows = await rest(url);
+    let rows;
+    if (__adminView){
+      rows = await rest(url, { auth:true });
+    } else {
+      // 未登入者讀不到部門碼/工號: 改由 DB 函式做同樣的 部門碼/姓名/工號 模糊比對, 只回 id/name/function
+      rows = await searchStudents(kw);
+    }
 
     // 根據結果數量決定流程
     if (Array.isArray(rows) && rows.length === 1){
@@ -2029,21 +2050,14 @@ btnCheckin?.addEventListener('click', async ()=>{
   __isSubmitting = true;
 
   try{
-    // 要求 PostgREST 回傳剛插入的資料
-    let ins = await rest('/rest/v1/students?select=*', {
+    await rest('/rest/v1/students', {
       method:'POST',
-      headers: { 'Prefer': 'return=representation' },
+      headers: { 'Prefer': 'return=minimal' },
       body: JSON.stringify({ team, function: fn||null, name, employee_no: emp })
     });
 
-    // 兼容回傳型態：可能是陣列或物件；也可能為 null（某些設定）
-    let created = Array.isArray(ins) ? ins[0] : ins;
-
-    // 如果仍拿不到，做一次 fallback 查詢（以 employee_no 撈）
-    if (!created?.id) {
-      const rows = await rest('/rest/v1/students?select=*&employee_no=eq.' + encodeURIComponent(emp));
-      created = Array.isArray(rows) ? rows[0] : rows;
-    }
+    // 未登入者讀不到新增後的完整資料 (工號/部門碼只開放給管理員), 改用工號查回 id
+    const created = await findStudentByEmp(emp);
 
     if (!created?.id) {
       throw new Error('建立學員後無法取得 id（可能是 RLS 或回傳設定問題）');

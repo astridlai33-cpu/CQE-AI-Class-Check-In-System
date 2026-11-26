@@ -275,7 +275,7 @@
 <!-- Phase 2: 共用模組 -->
 <script src="src/config.js?v=20260711"></script>
 <script src="src/utils.js?v=20260711"></script>
-<script src="src/api.js?v=20260711"></script>
+<script src="src/api.js?v=20261126"></script>
 <script src="src/broadcast.js?v=20260711"></script>
 <script src="src/checkin.js?v=20260711"></script>
 <script>
@@ -284,7 +284,7 @@
 const { SUPABASE_URL, SUPABASE_ANON_KEY } = window.CQE.config;
 const sb = window.CQE.sb;
 const { escapeHtml, getInitials, fmt, todayStr } = window.CQE.utils;
-const { rest } = window.CQE.api;
+const { rest, restPreferAdmin, findStudentByEmp, searchStudents } = window.CQE.api;
 const { doCheckin } = window.CQE.checkin;
 
 /* ===== App 程式 ===== */
@@ -311,6 +311,8 @@ function toast(text, type='success'){
 
 /* ===== 狀態與工具 ===== */
 let STUDENTS = [];
+let __adminView = false; // true = 管理員登入, STUDENTS 含部門碼/工號; 否則只有 id/name/function
+let __srvHit = null;     // 未登入者搜尋時, DB 函式依部分工號/部門碼/姓名查到的學員 { kw, ids:Set }
 let CHECKED = new Set();
 let __isSubmitting = false;
 // === Mobile 端 Postgres Realtime 訂閱 ===
@@ -557,7 +559,8 @@ function renderList(){
       (s.function||'').toLowerCase().includes(keyword) ||
       (s.team||'').toLowerCase().includes(keyword) ||
       (s.name||'').toLowerCase().includes(keyword) ||
-      (s.employee_no||'').toLowerCase().includes(keyword)
+      (s.employee_no||'').toLowerCase().includes(keyword) ||
+      (__srvHit && __srvHit.kw === keyword && __srvHit.ids.has(String(s.id)))
     );
   }
 
@@ -584,7 +587,6 @@ rows.forEach(s=>{
     </div>
     ${ok?'<span class="tag-ok">已報到</span>':''}
   `;
-  el.dataset.emp = s.employee_no || '';
   el.dataset.sid = String(s.id); // ← DOM 上也放字串
 
   el.addEventListener('click', async()=>{
@@ -638,7 +640,10 @@ async function loadStudents(){
   }
 
   try{
-    const studs = await rest('/rest/v1/students?select=*&limit=2000');
+    const { rows: studs, admin } = await restPreferAdmin(
+      '/rest/v1/students?select=*&limit=2000',
+      '/rest/v1/students?select=id,name,function&limit=2000');
+    __adminView = admin;
     STUDENTS = Array.isArray(studs)? studs : [];
     STUDENTS.sort((a,b)=> (a.name||'').localeCompare(b.name||'', 'en', {sensitivity:'base'}));
     __selectedFnMobile = null; // 切換課程時重置 Function 篩選
@@ -662,11 +667,23 @@ async function loadStudents(){
 
 
 /* 搜尋防抖 */
-let debounceT=null;
+let debounceT=null, empT=null;
 q.addEventListener('input', ()=>{
-  clearTimeout(debounceT);
+  clearTimeout(debounceT); clearTimeout(empT);
   debounceT = setTimeout(renderList, 120);
+  empT = setTimeout(lookupSrvHit, 350);
 });
+
+// 未登入者讀不到工號/部門碼: 由 DB 函式以部分工號/部門碼/姓名比對, 查到的學員併入名單結果 (畫面仍不顯示工號/部門碼)
+async function lookupSrvHit(){
+  const kw = (q.value||'').trim().toLowerCase();
+  if (__adminView || !kw || (__srvHit && __srvHit.kw === kw)) return;
+  __srvHit = null;
+  try{
+    const rows = await searchStudents(kw);
+    if ((q.value||'').trim().toLowerCase() === kw){ __srvHit = { kw, ids: new Set(rows.map(r=> String(r.id))) }; renderList(); }
+  }catch(_){ /* 查詢失敗就只顯示 Function/名字 的比對結果 */ }
+}
 
 /* 自助報到（輸入工號） */
 btnClear.addEventListener('click', ()=>{
@@ -692,13 +709,12 @@ btnIn.addEventListener('click', async()=>{
   __isSubmitting = true;
 
   try{
-    const stu = await rest('/rest/v1/students?select=*&employee_no=eq.'+encodeURIComponent(v));
-    if (!stu?.length){
+    const s = await findStudentByEmp(v);
+    if (!s){
       // 開啟自助建立 Modal（預填工號）
       openNewStudentModal(v);
       return;
     }
-    const s = stu[0];
 
     const _r = await doCheckin(cid, { id: s.id });
 
@@ -709,8 +725,8 @@ btnIn.addEventListener('click', async()=>{
     toast(_r.duplicated ? '✅ 已報到（重複略過）' : '🎉 報到成功', _r.duplicated ? 'dup' : 'success');
     emp.value='';
 
-    // 同步列表 UI：用 data-emp 對應 employee_no
-    const card = Array.from(list.children).find(x=> (x.dataset.emp||'') === (s.employee_no||''));
+    // 同步列表 UI：用 data-sid 對應學員 id
+    const card = Array.from(list.children).find(x=> x.dataset.sid === String(s.id));
     if (card){
       card.classList.add('checked');
       if (!card.querySelector('.tag-ok')){
@@ -743,19 +759,16 @@ function closeNewStudentModal(){
 }
 
 // 關閉行為：取消、點遮罩、ESC
-/* ── 報到前身分確認 (防誤點他人名字): 顯示 Function/部門碼/ID/名字, 確認才報到 ── */
+/* ── 報到前身分確認 (防誤點他人名字): 顯示 Function/名字 (管理員登入時加顯部門碼/ID), 確認才報到 ── */
 function confirmCheckinIdentity(s){
   return new Promise(resolve=>{
     const mask = document.getElementById('confirmCheckinMask');
     const rows = document.getElementById('confirmCheckinRows');
     const okBtn = document.getElementById('btnCheckinOk');
     const cancelBtn = document.getElementById('btnCheckinCancel');
-    const items = [
-      ['Function', s.function || '—'],
-      ['部門碼', s.team || '—'],
-      ['ID', s.employee_no || '—'],
-      ['名字', s.name || '—']
-    ];
+    const items = [['Function', s.function || '—']]
+      .concat(__adminView ? [['部門碼', s.team || '—'], ['ID', s.employee_no || '—']] : [])
+      .concat([['名字', s.name || '—']]);
     rows.innerHTML = items.map(([k,v])=>
       '<div style="color:var(--muted)">' + escapeHtml(k) + '</div>' +
       '<div style="color:var(--text);font-weight:700">' + escapeHtml(v) + '</div>'
@@ -805,12 +818,14 @@ async function onSaveNewStudent(){
   __isSubmitting = true;
 
   try{
-    const ins = await rest('/rest/v1/students?select=*', {
+    await rest('/rest/v1/students', {
       method:'POST',
-      headers:{ 'Prefer':'return=representation' },
+      headers:{ 'Prefer':'return=minimal' },
       body: JSON.stringify({ employee_no: empNo, name, team, function: fn })
     });
-    const s = Array.isArray(ins) ? ins[0] : ins;
+    // 未登入者讀不到新增後的完整資料 (工號/部門碼只開放給管理員), 改用工號查回 id/name/function
+    const s = await findStudentByEmp(empNo);
+    if (!s) throw new Error('建立學員後查不到這筆資料');
 
     // 若為今日課程則直接報到；否則只建立不報到
     if (!currentCourseId || !isTodayCourse){
